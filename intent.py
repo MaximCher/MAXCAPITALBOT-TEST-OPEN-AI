@@ -3,9 +3,95 @@ Rule-based intent detection module.
 
 This module provides functionality to detect user intents based on keyword matching.
 Supports the following intents: invest, documents, consult, support.
+Also detects specific services offered by MAXCAPITAL.
 """
 
-from typing import Optional
+from typing import Optional, List, Dict
+
+
+# Services offered by MAXCAPITAL
+SERVICES = {
+    "venture_capital": {
+        "code": "venture_capital",
+        "name": "VENTURE CAPITAL (Венчурный капитал)",
+        "keywords": [
+            "venture capital", "венчурный капитал", "венчур", "стартап", "стартапы",
+            "seed round", "раунд а", "раунд seed", "инвестиции в стартапы",
+            "фонд развития", "цифровая экономика", "gr-поддержка", "gr поддержка",
+            "инвестирование в стартапы", "seed", "раунд seed", "раунд a"
+        ]
+    },
+    "hnwi": {
+        "code": "hnwi",
+        "name": "HNWI Consultations (Консультации для частных лиц с крупным капиталом)",
+        "keywords": [
+            "hnwi", "high net worth", "крупный капитал", "частные лица",
+            "консультации для частных лиц", "миллион", "1 млн", "миллион долларов",
+            "крупный инвестор", "частный капитал", "личные инвестиции",
+            "конфиденциальные услуги", "персональные услуги"
+        ]
+    },
+    "real_estate": {
+        "code": "real_estate",
+        "name": "REAL ESTATE (Недвижимость)",
+        "keywords": [
+            "real estate", "недвижимость", "недвижимое имущество", "недвижимое",
+            "недооцененная недвижимость", "покупка недвижимости", "аукцион",
+            "аукционный дом", "объект недвижимости", "коммерческая недвижимость",
+            "жилая недвижимость", "инвестиции в недвижимость"
+        ]
+    },
+    "crypto": {
+        "code": "crypto",
+        "name": "CRYPTO (Криптовалюта)",
+        "keywords": [
+            "crypto", "криптовалюта", "крипта", "биткоин", "bitcoin", "ethereum",
+            "otc", "внебиржевые сделки", "криптовалютный портфель", "майнинг",
+            "инвестиции в криптовалюту", "криптоинвестиции", "криптопортфель",
+            "криптовалютные сделки", "внебиржевой", "крипто"
+        ]
+    },
+    "m_and_a": {
+        "code": "m_and_a",
+        "name": "M&A (Mergers & Acquisitions / Слияния и поглощения)",
+        "keywords": [
+            "m&a", "m and a", "слияния и поглощения", "слияние", "поглощение",
+            "mergers", "acquisitions", "buy-side", "sell-side", "buy side", "sell side",
+            "горизонтальная интеграция", "вертикальная интеграция", "интеграция бизнеса",
+            "сделки m&a", "сопровождение сделок", "консультирование сделок"
+        ]
+    },
+    "private_equity": {
+        "code": "private_equity",
+        "name": "PRIVATE EQUITY (Частный акционерный капитал)",
+        "keywords": [
+            "private equity", "частный акционерный капитал", "частный капитал",
+            "выкуп бизнеса", "выкуп бизнес-единиц", "экспорт", "экспортная выручка",
+            "экспортные рынки", "1 млрд", "миллиард", "оборот от миллиарда",
+            "частные инвестиции", "акционерный капитал"
+        ]
+    },
+    "relocation": {
+        "code": "relocation",
+        "name": "Relocation Support (Поддержка при релокации)",
+        "keywords": [
+            "relocation", "релокация", "переезд", "переезд за границу",
+            "внж", "пмж", "гражданство", "вид на жительство", "постоянное место жительства",
+            "международные транзакции", "получение статуса", "статус за рубежом",
+            "иммиграция", "эмиграция", "переезд в другую страну"
+        ]
+    },
+    "banking_cards": {
+        "code": "banking_cards",
+        "name": "ЗАРУБЕЖНЫЕ БАНКОВСКИЕ КАРТЫ",
+        "keywords": [
+            "банковская карта", "банковские карты", "зарубежная карта", "зарубежные карты",
+            "mastercard gold", "visa platinum", "visa infinite", "карта mastercard",
+            "карта visa", "оформление карты", "банковская карта за рубежом",
+            "киргизия", "таджикистан", "карта в киргизии", "карта в таджикистане"
+        ]
+    }
+}
 
 
 # Mapping of keywords to intents (English and Russian)
@@ -85,4 +171,60 @@ def detect_intent(text: str) -> Optional[str]:
         return max(intent_scores, key=intent_scores.get)
 
     return None
+
+
+def detect_services(text: str) -> List[Dict[str, str]]:
+    """
+    Detect services mentioned in text.
+
+    Args:
+        text: Input text to analyze for service detection.
+
+    Returns:
+        List of detected services with code and name.
+
+    Examples:
+        >>> detect_services("Интересует венчурный капитал и криптовалюта")
+        [{'code': 'venture_capital', 'name': 'VENTURE CAPITAL (Венчурный капитал)'}, 
+         {'code': 'crypto', 'name': 'CRYPTO (Криптовалюта)'}]
+    """
+    if not text or not isinstance(text, str):
+        return []
+
+    text_lower = text.lower()
+    detected_services = []
+
+    for service_code, service_data in SERVICES.items():
+        keywords = service_data["keywords"]
+        # Check if any keyword matches
+        if any(keyword in text_lower for keyword in keywords):
+            detected_services.append({
+                "code": service_data["code"],
+                "name": service_data["name"]
+            })
+
+    return detected_services
+
+
+def get_service_info(service_code: str) -> Optional[Dict[str, str]]:
+    """
+    Get service information by code.
+
+    Args:
+        service_code: Service code.
+
+    Returns:
+        Service information dict or None if not found.
+    """
+    return SERVICES.get(service_code)
+
+
+def get_all_services() -> Dict[str, Dict[str, str]]:
+    """
+    Get all available services.
+
+    Returns:
+        Dictionary of all services.
+    """
+    return SERVICES
 

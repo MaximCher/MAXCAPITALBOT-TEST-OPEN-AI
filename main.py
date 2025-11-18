@@ -31,12 +31,14 @@ from flask import Flask, jsonify, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-from intent import detect_intent
+from intent import detect_intent, detect_services
 import gdrive_service
 import knowledge_base
 import statistics
 import ai_consultant
 import conversation_state
+import db
+import re
 
 
 # Configuration
@@ -64,6 +66,70 @@ root_logger.addHandler(file_handler)
 root_logger.addHandler(console_handler)
 
 logger = logging.getLogger(__name__)
+
+
+def extract_phone(text: str) -> Optional[str]:
+    """Extract phone number from text."""
+    if not text:
+        return None
+    
+    # Patterns for phone numbers
+    patterns = [
+        r'\+?[1-9]\d{1,14}',  # International format
+        r'\+?7\s?\(?\d{3}\)?\s?\d{3}[- ]?\d{2}[- ]?\d{2}',  # Russian format
+        r'\+?7\d{10}',  # Russian format without spaces
+        r'\d{3}[- ]?\d{3}[- ]?\d{2}[- ]?\d{2}',  # Local format
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text)
+        if matches:
+            # Clean phone number
+            phone = re.sub(r'[\s\-\(\)]', '', matches[0])
+            if phone.startswith('8'):
+                phone = '7' + phone[1:]
+            if not phone.startswith('+'):
+                if phone.startswith('7'):
+                    phone = '+' + phone
+                else:
+                    phone = '+7' + phone
+            return phone
+    
+    return None
+
+
+def extract_name(text: str) -> Optional[Dict[str, str]]:
+    """Extract first and last name from text."""
+    if not text:
+        return None
+    
+    # Try to find name patterns
+    # Pattern: "Имя Фамилия" or "Фамилия Имя"
+    name_patterns = [
+        r'([А-ЯЁ][а-яё]+)\s+([А-ЯЁ][а-яё]+)',  # Russian names
+        r'([A-Z][a-z]+)\s+([A-Z][a-z]+)',  # English names
+    ]
+    
+    for pattern in name_patterns:
+        matches = re.findall(pattern, text)
+        if matches:
+            first_match = matches[0]
+            # Assume first is first name, second is last name
+            return {
+                "first_name": first_match[0],
+                "last_name": first_match[1]
+            }
+    
+    # Try single name
+    single_name_pattern = r'([А-ЯЁ][а-яё]+|[A-Z][a-z]+)'
+    matches = re.findall(single_name_pattern, text)
+    if matches:
+        return {
+            "first_name": matches[0],
+            "last_name": None
+        }
+    
+    return None
 
 
 class BitrixConfigurationError(RuntimeError):
@@ -237,13 +303,38 @@ def upsert_contact(
     return int(new_id), "created"
 
 
-def get_assigned_manager_id(intent: Optional[str] = None) -> Optional[int]:
+def find_user_by_email(config: BitrixConfig, email: str) -> Optional[int]:
+    """Find Bitrix24 user ID by email."""
+    try:
+        result = b24_request(
+            config,
+            "user.get",
+            {"filter": {"EMAIL": email}}
+        )
+        if result and isinstance(result, list) and len(result) > 0:
+            user_id = result[0].get("ID")
+            if user_id:
+                return int(user_id)
+    except Exception as e:
+        logger.error(f"Error finding user by email {email}: {e}")
+    return None
+
+
+def get_assigned_manager_id(config: BitrixConfig, intent: Optional[str] = None) -> Optional[int]:
     """
-    Get assigned manager ID based on intent or round-robin.
+    Get assigned manager ID based on intent or default.
     
     Returns:
         Manager ID from environment or None
     """
+    # First, try to get default manager by email
+    default_manager_email = os.environ.get("B24_DEFAULT_MANAGER_EMAIL", "theroonekz@gmail.com")
+    manager_id = find_user_by_email(config, default_manager_email)
+    if manager_id:
+        logger.info(f"Found default manager by email {default_manager_email}: {manager_id}")
+        return manager_id
+    
+    # Fallback to ID-based assignment
     # Get manager ID from environment based on intent
     if intent:
         intent_manager = os.environ.get(f"B24_MANAGER_{intent.upper()}")
@@ -253,7 +344,7 @@ def get_assigned_manager_id(intent: Optional[str] = None) -> Optional[int]:
             except ValueError:
                 pass
     
-    # Default manager or round-robin
+    # Default manager ID
     default_manager = os.environ.get("B24_DEFAULT_MANAGER_ID")
     if default_manager:
         try:
@@ -288,10 +379,12 @@ def create_lead(
         fields["PRODUCT_ID"] = product
     
     # Assign manager based on intent
-    assigned_manager = get_assigned_manager_id(intent)
+    assigned_manager = get_assigned_manager_id(config, intent)
     if assigned_manager:
         fields["ASSIGNED_BY_ID"] = assigned_manager
         logger.info(f"Assigning lead to manager ID: {assigned_manager} (intent: {intent})")
+    else:
+        logger.warning("No manager assigned to lead")
 
     params = {"REGISTER_SONET_EVENT": "Y"}
 
@@ -555,18 +648,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     session_id = statistics.stats.start_session(
         user.id,
         user.username,
-        user.first_name
+        user.first_name,
+        user.last_name
     )
     
-    # Get AI greeting
+    # Get AI greeting with services list
     greeting = (
         "Здравствуйте! 👋\n\n"
-        "Я консультант MAXCAPITAL. Помогу вам с:\n"
-        "• Инвестиционными продуктами\n"
-        "• Документами и презентациями\n"
-        "• Консультациями\n"
-        "• Поддержкой\n\n"
-        "Расскажите, пожалуйста, чем могу помочь?"
+        "Я консультант MAXCAPITAL. Мы предоставляем следующие услуги:\n\n"
+        "1. VENTURE CAPITAL (Венчурный капитал)\n"
+        "2. HNWI Consultations (Консультации для частных лиц с крупным капиталом)\n"
+        "3. REAL ESTATE (Недвижимость)\n"
+        "4. CRYPTO (Криптовалюта)\n"
+        "5. M&A (Слияния и поглощения)\n"
+        "6. PRIVATE EQUITY (Частный акционерный капитал)\n"
+        "7. Relocation Support (Поддержка при релокации)\n"
+        "8. ЗАРУБЕЖНЫЕ БАНКОВСКИЕ КАРТЫ\n\n"
+        "Какие услуги вас интересуют? Расскажите, пожалуйста, чем могу помочь?"
     )
     
     # Update conversation state
@@ -585,6 +683,59 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     })
 
 
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /stats command - show bot statistics."""
+    user = update.effective_user
+    
+    # Get statistics from database
+    stats_data = statistics.stats.get_statistics()
+    
+    # Format statistics message
+    total_visitors = stats_data.get("total_visitors", 0)
+    total_interested = stats_data.get("total_interested", 0)
+    total_leads = stats_data.get("total_leads", 0)
+    
+    # Calculate percentages
+    interested_percent = (total_interested / total_visitors * 100) if total_visitors > 0 else 0
+    leads_percent = (total_leads / total_visitors * 100) if total_visitors > 0 else 0
+    
+    stats_message = (
+        "📊 <b>СТАТИСТИКА БОТА MAXCAPITAL</b>\n\n"
+        f"👥 Всего обратились к боту: <b>{total_visitors}</b>\n"
+        f"🎯 Заинтересовались услугами: <b>{total_interested}</b> ({interested_percent:.1f}%)\n"
+        f"📞 Создали лид (ждут звонка): <b>{total_leads}</b> ({leads_percent:.1f}%)\n\n"
+    )
+    
+    # Add service distribution if available
+    service_distribution = stats_data.get("service_distribution", {})
+    if service_distribution:
+        stats_message += "📋 <b>Популярные услуги:</b>\n"
+        for service_code, service_info in list(service_distribution.items())[:5]:
+            service_name = service_info.get("name", service_code)
+            count = service_info.get("count", 0)
+            stats_message += f"• {service_name}: {count}\n"
+        stats_message += "\n"
+    
+    # Add daily stats for last 7 days
+    daily_stats = stats_data.get("daily_stats", [])
+    if daily_stats:
+        stats_message += "📅 <b>За последние 7 дней:</b>\n"
+        for day in daily_stats[:7]:
+            date = day.get("date", "")
+            visitors = day.get("visitors", 0)
+            interested = day.get("interested", 0)
+            leads = day.get("leads", 0)
+            stats_message += f"{date}: {visitors} обращений, {interested} заинтересовались, {leads} лидов\n"
+    
+    await update.message.reply_text(stats_message, parse_mode="HTML")
+    
+    log_event("telegram_command", {
+        "command": "stats",
+        "user_id": user.id,
+        "username": user.username
+    })
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming Telegram messages with AI consultation."""
     user = update.effective_user
@@ -596,7 +747,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         session_id = statistics.stats.start_session(
             user.id,
             user.username,
-            user.first_name
+            user.first_name,
+            user.last_name
         )
     
     # Get conversation state
@@ -614,18 +766,78 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     })
 
     try:
-        # Detect intent
+        # Detect intent and services
         detected_intent = detect_intent(message_text)
+        detected_services_list = detect_services(message_text)
         
-        # Update conversation state
+        # Update conversation state with detected services
+        if detected_services_list:
+            conversation_state.conversation_state.update_state(
+                user.id,
+                detected_services=detected_services_list
+            )
+            # Update session status to "interested" if services detected
+            if db.database.is_available() and session_id in statistics.stats.stats["sessions"]:
+                db_session_id = statistics.stats.stats["sessions"][session_id].get("db_session_id")
+                if db_session_id:
+                    try:
+                        db.database.update_session(
+                            session_id=db_session_id,
+                            status="interested"
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating session status to interested: {e}")
+            
+            # Add to selected services if user confirms interest
+            conv_state = conversation_state.conversation_state.get_state(user.id)
+            if conv_state.get("confirmed_intent"):
+                conversation_state.conversation_state.update_state(
+                    user.id,
+                    selected_services=detected_services_list
+                )
+        
+        # Handle data collection state
+        collected_info = conv_state.get("collected_info", {})
+        collecting_data = current_state == "collecting_data"
+        
+        # Extract phone and name - try to extract from ANY message if we're collecting data
+        # or if we don't have phone yet
+        if collecting_data or not collected_info.get("phone"):
+            phone = extract_phone(message_text)
+            name_data = extract_name(message_text)
+            
+            if phone:
+                collected_info["phone"] = phone
+                logger.info(f"Extracted phone: {phone}")
+            if name_data:
+                if name_data.get("first_name"):
+                    collected_info["first_name"] = name_data["first_name"]
+                if name_data.get("last_name"):
+                    collected_info["last_name"] = name_data["last_name"]
+                logger.info(f"Extracted name: {name_data}")
+            
+            # Update collected info if we found something
+            if phone or name_data:
+                conversation_state.conversation_state.update_state(
+                    user.id,
+                    info=collected_info
+                )
+                conv_state = conversation_state.conversation_state.get_state(user.id)
+                collected_info = conv_state.get("collected_info", {})
+                logger.info(f"Updated collected info: {collected_info}")
+        
+        # Update conversation state (this adds user message to history)
         conversation_state.conversation_state.update_state(
             user.id,
             message=message_text,
             intent=detected_intent if detected_intent else conv_state.get("detected_intent")
         )
         
+        # Refresh conv_state after update to get latest history
+        conv_state = conversation_state.conversation_state.get_state(user.id)
+        
         # Update statistics
-        statistics.stats.add_message(session_id, message_text, detected_intent)
+        statistics.stats.add_message(session_id, message_text, detected_intent, detected_services_list)
         
         # Get conversation history for AI
         history = conversation_state.conversation_state.get_conversation_history(user.id)
@@ -633,8 +845,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Prepare context for AI
         ai_context = {
             "detected_intent": detected_intent or conv_state.get("detected_intent"),
+            "detected_services": detected_services_list or conv_state.get("detected_services", []),
+            "selected_services": conv_state.get("selected_services", []),
             "current_state": current_state,
-            "confirmed_intent": conv_state.get("confirmed_intent", False)
+            "confirmed_intent": conv_state.get("confirmed_intent", False),
+            "collecting_data": collecting_data
         }
         
         # Get materials if intent detected
@@ -658,55 +873,225 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Check if user confirmed intention
         confirmed = False
         intent_to_confirm = detected_intent or conv_state.get("detected_intent")
+        has_services = len(detected_services_list) > 0 or len(conv_state.get("selected_services", [])) > 0
         
-        if intent_to_confirm:
-            # Check confirmation if we're in consulting phase or if intent just detected
-            if current_state in ["consulting", "confirming", "greeting"]:
-                confirmed = ai_consultant.ai_consultant.check_confirmation(message_text, history)
-                if confirmed:
-                    conversation_state.conversation_state.update_state(
-                        user.id,
-                        state="confirming",
-                        confirmed=True
+        if (intent_to_confirm or has_services) and current_state in ["consulting", "greeting"]:
+            confirmed = ai_consultant.ai_consultant.check_confirmation(message_text, history)
+            if confirmed:
+                conversation_state.conversation_state.update_state(
+                    user.id,
+                    state="consulting",
+                    confirmed=True,
+                    selected_services=detected_services_list if detected_services_list else conv_state.get("selected_services", [])
+                )
+                
+                # Update session status to "interested" in database
+                if db.database.is_available() and session_id in statistics.stats.stats["sessions"]:
+                    db_session_id = statistics.stats.stats["sessions"][session_id].get("db_session_id")
+                    if db_session_id:
+                        try:
+                            db.database.update_session(
+                                session_id=db_session_id,
+                                status="interested"
+                            )
+                        except Exception as e:
+                            logger.error(f"Error updating session status to interested: {e}")
+                
+                # Move to collecting data if not already collected
+                if not conversation_state.conversation_state.has_collected_all_data(user.id):
+                    conversation_state.conversation_state.update_state(user.id, state="collecting_data")
+                    ai_response += (
+                        "\n\n📝 Отлично! Для создания заявки мне нужна дополнительная информация:\n"
+                        "• Ваше ФИО (Фамилия и Имя)\n"
+                        "• Номер телефона\n\n"
+                        "Пожалуйста, предоставьте эти данные."
                     )
         
-        # Check if ready to create lead (after confirmation)
+        # Refresh conv_state AFTER all updates to get latest data
+        conv_state = conversation_state.conversation_state.get_state(user.id)
+        collected_info = conv_state.get("collected_info", {})
+        
+        # Check if we have all data and can create lead
+        # Check AFTER extracting phone/name from current message
         should_create_lead = conversation_state.conversation_state.is_ready_for_lead(user.id)
         
-        # Create contact and lead if confirmed
+        logger.info(f"=== LEAD CREATION CHECK ===")
+        logger.info(f"Should create lead: {should_create_lead}")
+        logger.info(f"Collected info: {collected_info}")
+        logger.info(f"Phone: {collected_info.get('phone')}")
+        logger.info(f"State: {conv_state.get('state')}")
+        logger.info(f"Confirmed: {conv_state.get('confirmed_intent')}")
+        logger.info(f"Services: selected={len(conv_state.get('selected_services', []))}, detected={len(conv_state.get('detected_services', []))}")
+        logger.info(f"Intent: {conv_state.get('detected_intent')}")
+        
+        # Save assistant response to conversation history BEFORE checking for lead creation
+        # This ensures the last bot message is in history
+        conversation_state.conversation_state.add_assistant_message(user.id, ai_response)
+        
+        # Create contact and lead if ready
         contact_id = None
         lead_id = None
         if should_create_lead:
             try:
                 config = app.config["BITRIX"]
-                name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username or f"User_{user.id}"
+                first_name = collected_info.get("first_name") or user.first_name or ""
+                last_name = collected_info.get("last_name") or user.last_name or ""
+                phone = collected_info.get("phone")
+                
+                name = f"{first_name} {last_name}".strip() or user.username or f"User_{user.id}"
+                
+                # Get services info for comment
+                selected_services = conv_state.get("selected_services", [])
+                detected_services = conv_state.get("detected_services", [])
+                all_services = selected_services if selected_services else detected_services
+                
+                services_list = []
+                if all_services:
+                    for service in all_services:
+                        service_name = service.get("name", service.get("code", ""))
+                        services_list.append(f"• {service_name}")
+                    services_text = "\n".join(services_list)
+                else:
+                    services_text = "Не указаны"
+                
+                # Build summary comment for Bitrix24 (brief, one paragraph)
+                # Extract key information from conversation
+                full_state = conversation_state.conversation_state.get_state(user.id)
+                history = full_state.get("conversation_history", [])
+                
+                # Extract user's key messages and interests
+                user_messages = []
+                key_info = []
+                
+                for msg in history:
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    if role == "user" and content:
+                        user_messages.append(content)
+                    elif role == "assistant" and content:
+                        # Extract questions bot asked to understand what client wants
+                        if "?" in content or "какую" in content.lower() or "какой" in content.lower():
+                            key_info.append(content[:100])
+                
+                # Build services summary
+                services_summary = ", ".join([s.get("name", s.get("code", "")).split("(")[0].strip() for s in all_services]) if all_services else "не указаны"
+                
+                # Build brief summary
+                summary_parts = []
+                summary_parts.append(f"Клиент интересуется услугами: {services_summary}.")
+                
+                # Add key user messages (what client wants)
+                if user_messages:
+                    # Get last few user messages that contain actual requests
+                    relevant_messages = []
+                    for msg in user_messages[-5:]:  # Last 5 user messages
+                        if len(msg) > 10 and not msg.lower().startswith(("да", "нет", "хорошо", "ок")):
+                            relevant_messages.append(msg[:150])
+                    
+                    if relevant_messages:
+                        client_wants = " ".join(relevant_messages[:2])  # First 2 relevant messages
+                        summary_parts.append(f"Клиент сообщил: {client_wants}.")
+                
+                # Add intent if available
+                intent = conv_state.get('detected_intent')
+                if intent:
+                    intent_names = {
+                        "invest": "инвестиции",
+                        "documents": "документы",
+                        "consult": "консультация",
+                        "support": "поддержка"
+                    }
+                    intent_ru = intent_names.get(intent, intent)
+                    summary_parts.append(f"Тип запроса: {intent_ru}.")
+                
+                # Join summary into one paragraph
+                summary = " ".join(summary_parts)
+                
+                # Build comment with HTML line breaks for Bitrix24
+                comment = f"<b>Краткая информация о клиенте:</b><br><br>{summary}"
+                
+                logger.info(f"Summary comment length: {len(comment)}")
+                logger.info(f"Summary: {summary}")
+                
+                # Truncate if too long (Bitrix24 limit is 2000 chars)
+                if len(comment) > 2000:
+                    comment = comment[:1997] + "..."
+                
+                logger.info(f"Final comment length: {len(comment)}")
+                logger.info(f"Comment that will be sent to Bitrix24:\n{comment}")
                 
                 # Create contact
                 try:
                     contact_id, status = upsert_contact(
                         config,
                         name=name,
-                        phone=None,
+                        phone=phone,
                         email=None,
-                        comment=f"Консультация через бота. Intent: {conv_state.get('detected_intent')}"
+                        comment=comment
                     )
                 except Exception as e:
                     logger.error(f"Failed to create contact: {e}")
                 
-                # Create lead
-                try:
-                    if config.inbound_webhook:
+                # Create lead - MUST create if we reached this point
+                if not config.inbound_webhook:
+                    logger.error("Cannot create lead: inbound_webhook is not configured")
+                    ai_response += "\n\n⚠️ Произошла ошибка конфигурации. Пожалуйста, обратитесь к администратору."
+                elif not phone:
+                    logger.error(f"Cannot create lead: phone is missing. Collected info: {collected_info}")
+                    ai_response += "\n\n⚠️ Для создания заявки необходим номер телефона. Пожалуйста, предоставьте его."
+                else:
+                    try:
+                        service_codes = [s.get("code") for s in all_services] if all_services else None
+                        
+                        # Create lead title with service info
+                        lead_title = name
+                        if all_services:
+                            # Add first service to title if available
+                            first_service_name = all_services[0].get("name", "").split("(")[0].strip()
+                            if first_service_name:
+                                lead_title = f"{name} - {first_service_name}"
+                        
+                        # Log comment before sending to Bitrix24
+                        logger.info(f"=== CREATING LEAD ===")
+                        logger.info(f"Name: {name}")
+                        logger.info(f"Phone: {phone}")
+                        logger.info(f"Services: {service_codes}")
+                        logger.info(f"Comment length: {len(comment)}")
+                        logger.info(f"Comment content:\n{comment}")
+                        
                         lead_id = create_lead(
                             config,
-                            name=name,
-                            phone=None,
+                            name=lead_title,
+                            phone=phone,
                             email=None,
-                            comment=f"Консультация через бота.\nIntent: {conv_state.get('detected_intent')}.\n\nПоследние сообщения:\n{message_text[:500]}",
+                            comment=comment,
                             intent=conv_state.get("detected_intent")
                         )
                         
+                        logger.info(f"✅ Lead created successfully with ID: {lead_id}")
+                        
                         # Mark as lead in statistics
-                        statistics.stats.convert_to_lead(session_id, lead_id, contact_id)
+                        statistics.stats.convert_to_lead(
+                            session_id, 
+                            lead_id, 
+                            contact_id,
+                            services_interested=service_codes
+                        )
+                        
+                        # Update database session
+                        if db.database.is_available() and session_id in statistics.stats.stats["sessions"]:
+                            db_session_id = statistics.stats.stats["sessions"][session_id].get("db_session_id")
+                            if db_session_id:
+                                try:
+                                    db.database.update_session(
+                                        session_id=db_session_id,
+                                        status="converted_to_lead",
+                                        services_interested=service_codes,
+                                        lead_id=lead_id,
+                                        contact_id=contact_id
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Error updating database session: {e}")
                         
                         # Update conversation state
                         conversation_state.conversation_state.update_state(
@@ -714,40 +1099,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                             state="completed"
                         )
                         
-                        # Add confirmation message
-                        ai_response += f"\n\n✅ Отлично! Я создал заявку для вас. Наш менеджер свяжется с вами в ближайшее время."
-                        if lead_id:
-                            ai_response += f"\n\n📋 Номер заявки: {lead_id}"
+                        # Replace AI response with confirmation message
+                        ai_response = (
+                            "✅ Отлично! Я создал заявку для вас. Наш менеджер свяжется с вами в ближайшее время.\n\n"
+                            f"📋 Номер заявки: {lead_id}\n\n"
+                            "Спасибо за обращение в MAXCAPITAL!"
+                        )
+                        
+                        # Update assistant message in history
+                        conversation_state.conversation_state.add_assistant_message(user.id, ai_response)
                         
                         log_event("lead_created_after_confirmation", {
                             "user_id": user.id,
                             "lead_id": lead_id,
                             "contact_id": contact_id,
                             "intent": conv_state.get("detected_intent"),
+                            "services": service_codes,
                             "session_id": session_id
                         })
-                except Exception as e:
-                    logger.error(f"Failed to create lead: {e}")
-                    ai_response += "\n\n⚠️ Произошла ошибка при создании заявки. Попробуйте позже."
+                    except Exception as e:
+                        logger.error(f"Failed to create lead: {e}", exc_info=True)
+                        ai_response += "\n\n⚠️ Произошла ошибка при создании заявки. Попробуйте позже."
             except Exception as e:
                 logger.exception("Error creating contact/lead")
         
         # Update conversation state based on response
-        if detected_intent and not conv_state.get("confirmed_intent"):
+        if (detected_intent or detected_services_list) and not conv_state.get("confirmed_intent"):
             if current_state == "greeting":
-                # Move to consulting when intent detected
+                # Move to consulting when intent/services detected
                 conversation_state.conversation_state.update_state(user.id, state="consulting")
-        elif confirmed and current_state != "completed":
-            # Move to confirming when user confirms
-            conversation_state.conversation_state.update_state(user.id, state="confirming")
         
         # Add materials to response if available
         if drive_files and detected_intent:
             files_text = knowledge_base.format_files_for_telegram(drive_files)
             ai_response += f"\n\n{files_text}"
         
-        # Save assistant response to conversation history
-        conversation_state.conversation_state.add_assistant_message(user.id, ai_response)
+        # Note: Assistant response is saved earlier, before lead creation check
+        # This ensures all messages are in history when creating lead
         
         # Send response to user
         await update.message.reply_text(ai_response, parse_mode="Markdown")
@@ -757,6 +1145,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "response": ai_response,
             "session_id": session_id,
             "detected_intent": detected_intent,
+            "detected_services": [s.get("code") for s in detected_services_list],
             "confirmed": confirmed,
             "lead_created": lead_id is not None
         })
@@ -777,6 +1166,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def run_telegram_bot():
     """Run Telegram bot in a separate thread."""
+    import asyncio
+    
     token = os.environ.get("TELEGRAM_TOKEN")
     if not token:
         logger.warning("TELEGRAM_TOKEN not set, Telegram bot will not start")
@@ -785,15 +1176,57 @@ def run_telegram_bot():
     async def post_init(app: Application) -> None:
         logger.info("Telegram bot started successfully")
 
-    application = Application.builder().token(token).post_init(post_init).build()
+    async def main():
+        """Main async function to run the bot."""
+        application = Application.builder().token(token).post_init(post_init).build()
 
-    # Add handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        # Add handlers
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("stats", stats_command))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Run bot
-    logger.info("Starting Telegram bot...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Initialize and start polling
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        logger.info("Telegram bot started successfully")
+        
+        # Keep running until stopped
+        try:
+            await asyncio.Event().wait()  # Wait indefinitely
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await application.stop()
+            await application.shutdown()
+
+    # Create new event loop for this thread
+    if os.name == 'nt':  # Windows
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
+    
+    asyncio.set_event_loop(loop)
+
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("Telegram bot stopped by user")
+    except Exception as e:
+        logger.exception(f"Error in Telegram bot thread: {e}")
+    finally:
+        try:
+            # Cancel all pending tasks
+            pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        except Exception:
+            pass
+        finally:
+            loop.close()
 
 
 # Initialize Flask app

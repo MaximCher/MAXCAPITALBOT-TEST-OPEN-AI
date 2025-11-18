@@ -148,6 +148,51 @@
           "text": "Хорошо, спасибо",
           "intent": null,
           "timestamp": "2025-11-18T13:14:30.255194"
+        },
+        {
+          "text": "Здравствуйте",
+          "intent": null,
+          "timestamp": "2025-11-18T22:41:20.216942"
+        },
+        {
+          "text": "Какие услуги у вас есть?",
+          "intent": null,
+          "timestamp": "2025-11-18T22:41:36.056352"
+        },
+        {
+          "text": "Недвижимость хотел бы приобрести",
+          "intent": null,
+          "timestamp": "2025-11-18T22:41:58.365018"
+        },
+        {
+          "text": "Я ничего не знаю, не разбираюсь в этом. Поэтому сделайте все за меня, я заплачу",
+          "intent": null,
+          "timestamp": "2025-11-18T22:42:27.039949"
+        },
+        {
+          "text": "Много денег, на все готов, давайте",
+          "intent": null,
+          "timestamp": "2025-11-18T22:42:41.426066"
+        },
+        {
+          "text": "В любой, я готов",
+          "intent": null,
+          "timestamp": "2025-11-18T22:43:20.322723"
+        },
+        {
+          "text": "Любой, я готов лкупить у вас услуги",
+          "intent": null,
+          "timestamp": "2025-11-18T22:43:37.666999"
+        },
+        {
+          "text": "Ювашев Бембемщик, 87051999999",
+          "intent": null,
+          "timestamp": "2025-11-18T22:43:55.838282"
+        },
+        {
+          "text": "Хорошо, спасибо",
+          "intent": null,
+          "timestamp": "2025-11-18T22:45:02.585626"
         }
       ],
       "intents": [
@@ -157,21 +202,368 @@
       "lead_id": 120,
       "contact_id": 88,
       "converted_at": "2025-11-18T13:02:58.739135"
+    },
+    "303359781_1763487912.0839": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T22:45:12.083900",
+      "messages": [],
+      "intents": [],
+      "converted_to_lead": false,
+      "lead_id": null,
+      "contact_id": null
+    },
+    "303359781_1763487985.040528": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T22:46:25.040528",
+      "messages": [
+        {
+          "text": "Криптовалюта",
+          "intent": null,
+          "timestamp": "2025-11-18T22:46:32.180199"
+        },
+        {
+          "text": "Я ничего не знаю",
+          "intent": null,
+          "timestamp": "2025-11-18T22:46:45.720064"
+        },
+        {
+          "text": "Инвестиция",
+          "intent": "invest",
+          "timestamp": "2025-11-18T22:47:00.064285"
+        },
+        {
+          "text": "Давайте",
+          "intent": null,
+          "timestamp": "2025-11-18T22:47:14.451033"
+        },
+        {
+          "text": "Мемезис Купиль, 87071289191",
+          "intent": null,
+          "timestamp": "2025-11-18T22:47:28.886671"
+        }
+      ],
+      "intents": [
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 124,
+      "contact_id": null,
+      "converted_at": "2025-11-18T22:47:32.913953"
+    },
+    "303359781_1763488308.399522": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T22:51:48.399522",
+      "messages": [
+        {
+          "text": "криптовалюта",
+          "intent": null,
+          "timestamp": "2025-11-18T22:51:57.442106"
+        },
+        {
+          "text": "Инвестиции в майнинг?",
+          "intent": "invest",
+          "timestamp": "2025-11-18T22:52:15.069350"
+        },
+        {
+          "text": "Собираюсь вложить 170000$ в майнинг",
+          "intent": "invest",
+          "timestamp": "2025-11-18T22:52:39.484383"
+        },
+        {
+          "text": "Марк Маркул, 87777777777",
+          "intent": null,
+          "timestamp": "2025-11-18T22:52:57.553891"
+        }
+      ],
+      "intents": [
+        "invest",
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 126,
+      "contact_id": null,
+      "converted_at": "2025-11-18T22:53:01.428776"
+    },
+    "303359781_1763488924.786192": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T23:02:04.786192",
+      "messages": [
+        {
+          "text": "криптовалюта",
+          "intent": null,
+          "timestamp": "2025-11-18T23:02:12.163846"
+        },
+        {
+          "text": "Инвестиции в майнинг",
+          "intent": "invest",
+          "timestamp": "2025-11-18T23:02:20.835506"
+        },
+        {
+          "text": "Собираюсь вложить 170000$ в майнинг",
+          "intent": "invest",
+          "timestamp": "2025-11-18T23:02:27.043620"
+        },
+        {
+          "text": "Дренажный Патифист, 87019329497",
+          "intent": null,
+          "timestamp": "2025-11-18T23:02:44.481093"
+        }
+      ],
+      "intents": [
+        "invest",
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 128,
+      "contact_id": null,
+      "converted_at": "2025-11-18T23:02:48.604526"
+    },
+    "303359781_1763489088.825199": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T23:04:48.825199",
+      "messages": [
+        {
+          "text": "крипта",
+          "intent": null,
+          "timestamp": "2025-11-18T23:04:51.773532"
+        },
+        {
+          "text": "инвестиции",
+          "intent": "invest",
+          "timestamp": "2025-11-18T23:04:59.969194"
+        },
+        {
+          "text": "1000000$",
+          "intent": null,
+          "timestamp": "2025-11-18T23:05:10.580090"
+        },
+        {
+          "text": "Инвестиция в майнинг",
+          "intent": "invest",
+          "timestamp": "2025-11-18T23:05:24.635443"
+        },
+        {
+          "text": "Вопросов много, мне нужен менеджер",
+          "intent": null,
+          "timestamp": "2025-11-18T23:05:49.176733"
+        },
+        {
+          "text": "Артур Тигранович, 890194599985",
+          "intent": null,
+          "timestamp": "2025-11-18T23:06:10.627698"
+        },
+        {
+          "text": "Создай лид",
+          "intent": null,
+          "timestamp": "2025-11-18T23:06:42.396980"
+        },
+        {
+          "text": "Пикасо Бернандо, 870691858484",
+          "intent": null,
+          "timestamp": "2025-11-18T23:07:13.246614"
+        }
+      ],
+      "intents": [
+        "invest",
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 130,
+      "contact_id": null,
+      "converted_at": "2025-11-18T23:07:16.947539"
+    },
+    "303359781_1763489482.88901": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T23:11:22.889010",
+      "messages": [
+        {
+          "text": "Меня интересует криптовалюта",
+          "intent": null,
+          "timestamp": "2025-11-18T23:11:31.271648"
+        },
+        {
+          "text": "Иван Патаскович, 870591838584",
+          "intent": null,
+          "timestamp": "2025-11-18T23:11:50.827154"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 132,
+      "contact_id": null,
+      "converted_at": "2025-11-18T23:11:55.426120"
+    },
+    "303359781_1763489678.633268": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T23:14:38.633268",
+      "messages": [
+        {
+          "text": "Хочу криптовалюту",
+          "intent": null,
+          "timestamp": "2025-11-18T23:14:45.622336"
+        },
+        {
+          "text": "Иван Циркович, 87051491929",
+          "intent": null,
+          "timestamp": "2025-11-18T23:14:59.012620"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 134,
+      "contact_id": null,
+      "converted_at": "2025-11-18T23:15:02.170123"
+    },
+    "303359781_1763489947.377021": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T23:19:07.377021",
+      "messages": [
+        {
+          "text": "Интересует криптовалюта",
+          "intent": null,
+          "timestamp": "2025-11-18T23:19:14.811059"
+        },
+        {
+          "text": "Мильдони Филоко, 87051925454",
+          "intent": null,
+          "timestamp": "2025-11-18T23:19:37.192533"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 136,
+      "contact_id": null,
+      "converted_at": "2025-11-18T23:19:42.495576"
+    },
+    "303359781_1763490663.206638": {
+      "user_id": 303359781,
+      "db_session_id": 1,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T23:31:03.206638",
+      "messages": [
+        {
+          "text": "Меня интересует криптовалюта, хочу очень выгодно вложиться",
+          "intent": "invest",
+          "timestamp": "2025-11-18T23:31:19.102783"
+        },
+        {
+          "text": "87028349685",
+          "intent": null,
+          "timestamp": "2025-11-18T23:31:36.993189"
+        },
+        {
+          "text": "Юрмец Герендек",
+          "intent": null,
+          "timestamp": "2025-11-18T23:31:46.956045"
+        }
+      ],
+      "intents": [
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 138,
+      "contact_id": null,
+      "converted_at": "2025-11-18T23:31:51.362308"
+    },
+    "1953158375_1763491619.895829": {
+      "user_id": 1953158375,
+      "db_session_id": 2,
+      "username": "laviedanie",
+      "first_name": "Daniela",
+      "started_at": "2025-11-18T23:46:59.895829",
+      "messages": [
+        {
+          "text": "3",
+          "intent": null,
+          "timestamp": "2025-11-18T23:47:33.437918"
+        },
+        {
+          "text": "1. Квартира, 2. Астана, Казахстан, 3. 50000000 тенге",
+          "intent": null,
+          "timestamp": "2025-11-18T23:48:30.552630"
+        },
+        {
+          "text": "1. 3х комнатная квартира 2. Ближе к центру города 3. Паркинг обязательно, можно без ремонта, но с большим количеством окон и не первый этаж",
+          "intent": null,
+          "timestamp": "2025-11-18T23:49:55.574717"
+        },
+        {
+          "text": "1. Можно долгосрочный план, 2. Новостройка желательно (важно чтобы застройщик был с хорошей репутацией) 3. Модно чтобы был парк рядом",
+          "intent": null,
+          "timestamp": "2025-11-18T23:52:03.271917"
+        },
+        {
+          "text": "1",
+          "intent": null,
+          "timestamp": "2025-11-18T23:52:38.679126"
+        },
+        {
+          "text": "1. 1 год\n2. Без разницы \n3. Можно",
+          "intent": null,
+          "timestamp": "2025-11-18T23:53:19.478184"
+        },
+        {
+          "text": "Давай все по очереди",
+          "intent": null,
+          "timestamp": "2025-11-18T23:53:56.788109"
+        },
+        {
+          "text": "1.10000000 тенге \n2. 20 лет \n3. Давай разные рассмотрим",
+          "intent": null,
+          "timestamp": "2025-11-18T23:55:23.700890"
+        },
+        {
+          "text": "Когда ты скинешь всю информацию?",
+          "intent": null,
+          "timestamp": "2025-11-18T23:56:47.712547"
+        },
+        {
+          "text": "По телефону",
+          "intent": null,
+          "timestamp": "2025-11-18T23:57:09.984468"
+        },
+        {
+          "text": "Даниэла Габдуллина +77074988138",
+          "intent": null,
+          "timestamp": "2025-11-18T23:57:35.008275"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": false,
+      "lead_id": null,
+      "contact_id": null
     }
   },
   "daily_stats": {
     "2025-11-18": {
-      "sessions": 4,
-      "leads": 3,
+      "sessions": 14,
+      "leads": 11,
       "intents": {
-        "invest": 1
+        "invest": 9
       }
     }
   },
   "intent_stats": {
-    "invest": 1
+    "invest": 9
   },
-  "lead_conversions": 3,
-  "total_sessions": 4,
-  "total_leads": 3
+  "lead_conversions": 11,
+  "total_sessions": 14,
+  "total_leads": 11
 }

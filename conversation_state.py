@@ -44,11 +44,17 @@ class ConversationState:
         user_key = str(user_id)
         if user_key not in self.states:
             self.states[user_key] = {
-                "state": "greeting",  # greeting, consulting, confirming, completed
+                "state": "greeting",  # greeting, consulting, collecting_data, completed
                 "conversation_history": [],
                 "detected_intent": None,
+                "detected_services": [],  # List of services detected
+                "selected_services": [],  # List of services user is interested in
                 "confirmed_intent": False,
-                "collected_info": {},
+                "collected_info": {
+                    "first_name": None,
+                    "last_name": None,
+                    "phone": None
+                },
                 "last_updated": datetime.now().isoformat()
             }
             self._save_states()
@@ -62,7 +68,9 @@ class ConversationState:
         message: Optional[str] = None,
         intent: Optional[str] = None,
         confirmed: Optional[bool] = None,
-        info: Optional[Dict[str, Any]] = None
+        info: Optional[Dict[str, Any]] = None,
+        detected_services: Optional[List[Dict[str, str]]] = None,
+        selected_services: Optional[List[Dict[str, str]]] = None
     ):
         """Update conversation state for user."""
         user_key = str(user_id)
@@ -90,6 +98,20 @@ class ConversationState:
         
         if info:
             user_state["collected_info"].update(info)
+        
+        if detected_services is not None:
+            # Merge detected services, avoiding duplicates
+            existing_codes = {s.get("code") for s in user_state.get("detected_services", [])}
+            for service in detected_services:
+                if service.get("code") not in existing_codes:
+                    user_state.setdefault("detected_services", []).append(service)
+        
+        if selected_services is not None:
+            # Merge selected services, avoiding duplicates
+            existing_codes = {s.get("code") for s in user_state.get("selected_services", [])}
+            for service in selected_services:
+                if service.get("code") not in existing_codes:
+                    user_state.setdefault("selected_services", []).append(service)
         
         user_state["last_updated"] = datetime.now().isoformat()
         self._save_states()
@@ -127,14 +149,41 @@ class ConversationState:
     def is_ready_for_lead(self, user_id: int) -> bool:
         """Check if conversation is ready to create lead."""
         user_state = self.get_state(user_id)
+        collected_info = user_state.get("collected_info", {})
+        
         # Ready if:
-        # 1. Intent is detected
-        # 2. User confirmed their intention
-        # 3. State is confirming or consulting with confirmation
+        # 1. We have phone number (REQUIRED!)
+        # 2. User has services or intent detected
+        # Phone is the most important - if we have it and services, create lead
+        
+        has_phone = bool(collected_info.get("phone"))
+        if not has_phone:
+            return False  # Phone is mandatory
+        
+        has_services = (
+            len(user_state.get("selected_services", [])) > 0 or
+            len(user_state.get("detected_services", [])) > 0 or
+            user_state.get("detected_intent") is not None
+        )
+        
+        # If we have phone and services, create lead
+        # Don't require confirmed_intent if we have services detected
+        current_state = user_state.get("state", "greeting")
+        
         return (
-            user_state.get("detected_intent") is not None and
-            user_state.get("confirmed_intent") is True and
-            user_state["state"] in ["confirming", "consulting"]
+            has_phone and
+            has_services and
+            current_state in ["collecting_data", "consulting", "completed", "greeting"]  # Allow all states if we have phone and services
+        )
+    
+    def has_collected_all_data(self, user_id: int) -> bool:
+        """Check if all required data is collected."""
+        user_state = self.get_state(user_id)
+        collected_info = user_state.get("collected_info", {})
+        return (
+            collected_info.get("first_name") and
+            collected_info.get("last_name") and
+            collected_info.get("phone")
         )
 
 

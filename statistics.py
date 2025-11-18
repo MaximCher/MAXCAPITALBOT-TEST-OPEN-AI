@@ -6,6 +6,7 @@ Tracks:
 - Lead conversions (users who became leads)
 - Intent distribution
 - User journey analytics
+- Service interests
 """
 
 import json
@@ -13,6 +14,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
+import db
 
 STATS_FILE = "bot_statistics.json"
 
@@ -51,10 +53,61 @@ class BotStatistics:
         except Exception as e:
             print(f"Error saving statistics: {e}")
     
-    def start_session(self, user_id: int, username: Optional[str], first_name: Optional[str]):
+    def start_session(self, user_id: int, username: Optional[str], first_name: Optional[str], last_name: Optional[str] = None):
         """Record a new user session."""
-        today = datetime.now().strftime("%Y-%m-%d")
+        # Try to use database first
+        if db.database.is_available():
+            try:
+                # Upsert user
+                db_user_id = db.database.upsert_user(
+                    telegram_user_id=user_id,
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name
+                )
+                
+                if db_user_id:
+                    # Create session in database
+                    db_session_id = db.database.create_session(
+                        user_id=db_user_id,
+                        telegram_user_id=user_id,
+                        status="active"
+                    )
+                    
+                    if db_session_id:
+                        # Also save to JSON for backward compatibility
+                        today = datetime.now().strftime("%Y-%m-%d")
+                        if today not in self.stats["daily_stats"]:
+                            self.stats["daily_stats"][today] = {
+                                "sessions": 0,
+                                "leads": 0,
+                                "intents": {}
+                            }
+                        
+                        session_id = f"{user_id}_{datetime.now().timestamp()}"
+                        self.stats["sessions"][session_id] = {
+                            "user_id": user_id,
+                            "db_session_id": db_session_id,
+                            "username": username,
+                            "first_name": first_name,
+                            "started_at": datetime.now().isoformat(),
+                            "messages": [],
+                            "intents": [],
+                            "converted_to_lead": False,
+                            "lead_id": None,
+                            "contact_id": None
+                        }
+                        
+                        self.stats["total_sessions"] += 1
+                        self.stats["daily_stats"][today]["sessions"] += 1
+                        self._save_stats()
+                        
+                        return session_id
+            except Exception as e:
+                print(f"Error creating session in database: {e}")
         
+        # Fallback to JSON only
+        today = datetime.now().strftime("%Y-%m-%d")
         if today not in self.stats["daily_stats"]:
             self.stats["daily_stats"][today] = {
                 "sessions": 0,
@@ -81,8 +134,43 @@ class BotStatistics:
         
         return session_id
     
-    def add_message(self, session_id: str, message: str, intent: Optional[str]):
+    def add_message(self, session_id: str, message: str, intent: Optional[str], detected_services: Optional[List[Dict[str, str]]] = None):
         """Add a message to session."""
+        # Try to add to database first
+        if db.database.is_available() and session_id in self.stats["sessions"]:
+            session = self.stats["sessions"][session_id]
+            db_session_id = session.get("db_session_id")
+            
+            if db_session_id:
+                try:
+                    service_codes = [s.get("code") for s in (detected_services or [])]
+                    db.database.add_message(
+                        session_id=db_session_id,
+                        message_text=message,
+                        message_type="user",
+                        detected_intent=intent,
+                        detected_services=service_codes if service_codes else None
+                    )
+                    
+                    # Also add service interests
+                    if detected_services:
+                        for service in detected_services:
+                            db.database.add_service_interest(
+                                session_id=db_session_id,
+                                service_code=service.get("code", ""),
+                                service_name=service.get("name", ""),
+                                interest_level="interested"
+                            )
+                        
+                        # Update session status to "interested" if services detected
+                        db.database.update_session(
+                            session_id=db_session_id,
+                            status="interested"
+                        )
+                except Exception as e:
+                    print(f"Error adding message to database: {e}")
+        
+        # Also save to JSON
         if session_id in self.stats["sessions"]:
             session = self.stats["sessions"][session_id]
             session["messages"].append({
@@ -106,8 +194,26 @@ class BotStatistics:
             
             self._save_stats()
     
-    def convert_to_lead(self, session_id: str, lead_id: int, contact_id: Optional[int] = None):
+    def convert_to_lead(self, session_id: str, lead_id: int, contact_id: Optional[int] = None, services_interested: Optional[List[str]] = None):
         """Mark session as converted to lead."""
+        # Update database first
+        if db.database.is_available() and session_id in self.stats["sessions"]:
+            session = self.stats["sessions"][session_id]
+            db_session_id = session.get("db_session_id")
+            
+            if db_session_id:
+                try:
+                    db.database.update_session(
+                        session_id=db_session_id,
+                        status="converted_to_lead",
+                        services_interested=services_interested,
+                        lead_id=lead_id,
+                        contact_id=contact_id
+                    )
+                except Exception as e:
+                    print(f"Error updating session in database: {e}")
+        
+        # Also update JSON
         if session_id in self.stats["sessions"]:
             session = self.stats["sessions"][session_id]
             if not session["converted_to_lead"]:
@@ -142,6 +248,35 @@ class BotStatistics:
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get overall statistics."""
+        # Try to get from database first
+        if db.database.is_available():
+            try:
+                db_stats = db.database.get_statistics()
+                # Merge with JSON stats for backward compatibility
+                json_stats = self._get_json_statistics()
+                
+                return {
+                    "total_visitors": db_stats.get("total_visitors", json_stats.get("total_sessions", 0)),
+                    "total_interested": db_stats.get("total_interested", 0),
+                    "total_leads": db_stats.get("total_leads", json_stats.get("total_leads", 0)),
+                    "conversion_rate": round(
+                        (db_stats.get("total_leads", 0) / db_stats.get("total_visitors", 1) * 100) 
+                        if db_stats.get("total_visitors", 0) > 0 else 0, 
+                        2
+                    ),
+                    "service_distribution": db_stats.get("service_distribution", {}),
+                    "intent_distribution": json_stats.get("intent_distribution", {}),
+                    "daily_stats": db_stats.get("daily_stats", json_stats.get("last_7_days", [])),
+                    "lead_conversions": db_stats.get("total_leads", json_stats.get("lead_conversions", 0))
+                }
+            except Exception as e:
+                print(f"Error getting statistics from database: {e}")
+        
+        # Fallback to JSON only
+        return self._get_json_statistics()
+    
+    def _get_json_statistics(self) -> Dict[str, Any]:
+        """Get statistics from JSON file (fallback)."""
         total_sessions = self.stats["total_sessions"]
         total_leads = self.stats["total_leads"]
         conversion_rate = (total_leads / total_sessions * 100) if total_sessions > 0 else 0
