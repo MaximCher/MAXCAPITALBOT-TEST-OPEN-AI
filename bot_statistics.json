@@ -1,0 +1,177 @@
+{
+  "sessions": {
+    "303359781_1763451666.272036": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T12:41:06.272036",
+      "messages": [
+        {
+          "text": "Намерение по приколу",
+          "intent": null,
+          "timestamp": "2025-11-18T12:41:07.930255"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 116,
+      "contact_id": 80,
+      "converted_at": "2025-11-18T12:41:07.930255"
+    },
+    "303359781_1763451697.54084": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T12:41:37.540840",
+      "messages": [
+        {
+          "text": "Какие намерения у вас есть?",
+          "intent": null,
+          "timestamp": "2025-11-18T12:42:03.811411"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 118,
+      "contact_id": 82,
+      "converted_at": "2025-11-18T12:42:03.813410"
+    },
+    "303359781_1763451934.517712": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T12:45:34.517712",
+      "messages": [
+        {
+          "text": "Здравствуйте",
+          "intent": null,
+          "timestamp": "2025-11-18T12:45:42.400902"
+        },
+        {
+          "text": "Чем вы занимаетесь?",
+          "intent": null,
+          "timestamp": "2025-11-18T12:45:55.833542"
+        },
+        {
+          "text": "Здравствуйте",
+          "intent": null,
+          "timestamp": "2025-11-18T12:59:08.381314"
+        },
+        {
+          "text": "ВНЖ интересует",
+          "intent": null,
+          "timestamp": "2025-11-18T12:59:21.200144"
+        },
+        {
+          "text": "Хочу переехать",
+          "intent": null,
+          "timestamp": "2025-11-18T12:59:30.196907"
+        },
+        {
+          "text": "Италия, работать",
+          "intent": null,
+          "timestamp": "2025-11-18T12:59:41.780929"
+        },
+        {
+          "text": "AI Engineer",
+          "intent": null,
+          "timestamp": "2025-11-18T12:59:57.442737"
+        },
+        {
+          "text": "Долго и много",
+          "intent": null,
+          "timestamp": "2025-11-18T13:00:11.850378"
+        },
+        {
+          "text": "Да",
+          "intent": null,
+          "timestamp": "2025-11-18T13:00:19.041053"
+        },
+        {
+          "text": "Хорошо",
+          "intent": null,
+          "timestamp": "2025-11-18T13:00:41.618436"
+        },
+        {
+          "text": "Спасибо",
+          "intent": null,
+          "timestamp": "2025-11-18T13:01:00.557682"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": false,
+      "lead_id": null,
+      "contact_id": null
+    },
+    "303359781_1763452901.311384": {
+      "user_id": 303359781,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-18T13:01:41.311384",
+      "messages": [
+        {
+          "text": "Что вы можете мне предложить?",
+          "intent": null,
+          "timestamp": "2025-11-18T13:01:54.008309"
+        },
+        {
+          "text": "Пенсионные фонды",
+          "intent": "invest",
+          "timestamp": "2025-11-18T13:02:05.718519"
+        },
+        {
+          "text": "Долго и много",
+          "intent": null,
+          "timestamp": "2025-11-18T13:02:16.475319"
+        },
+        {
+          "text": "10000$",
+          "intent": null,
+          "timestamp": "2025-11-18T13:02:28.451776"
+        },
+        {
+          "text": "Агрессивные",
+          "intent": null,
+          "timestamp": "2025-11-18T13:02:40.775794"
+        },
+        {
+          "text": "ДАвайте",
+          "intent": null,
+          "timestamp": "2025-11-18T13:02:52.802295"
+        },
+        {
+          "text": "Привет",
+          "intent": null,
+          "timestamp": "2025-11-18T13:14:02.899904"
+        },
+        {
+          "text": "Хорошо, спасибо",
+          "intent": null,
+          "timestamp": "2025-11-18T13:14:30.255194"
+        }
+      ],
+      "intents": [
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 120,
+      "contact_id": 88,
+      "converted_at": "2025-11-18T13:02:58.739135"
+    }
+  },
+  "daily_stats": {
+    "2025-11-18": {
+      "sessions": 4,
+      "leads": 3,
+      "intents": {
+        "invest": 1
+      }
+    }
+  },
+  "intent_stats": {
+    "invest": 1
+  },
+  "lead_conversions": 3,
+  "total_sessions": 4,
+  "total_leads": 3
+}

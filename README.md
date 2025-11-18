@@ -1,49 +1,210 @@
-# MAXCAPITALBOT-TEST-OPEN-AI
+# MAXCAPITAL Bot
 
-A minimal Flask application that exposes a health endpoint and a Bitrix webhook receiver that can upsert Bitrix24 contacts and optionally post chat messages.
+Полнофункциональный Telegram-бот с интеграцией Bitrix24 и Google Drive для обработки запросов клиентов.
 
-## Requirements
+## Возможности
+
+- 🤖 **Telegram Bot** - автоматическая обработка сообщений пользователей
+- 🤖 **AI Consultant** - интеллектуальный консультант на базе OpenAI для общения с клиентами
+- 💬 **Smart Conversation** - умный диалог с клиентами, выяснение потребностей перед созданием лида
+- 📊 **Bitrix24 Integration** - создание/обновление контактов и лидов (только после подтверждения клиента)
+- 🎯 **Intent Detection** - определение намерений пользователя (инвестиции, документы, консультация, поддержка)
+- 📁 **Google Drive Integration** - поиск документов по ключевым словам
+- 📝 **Comprehensive Logging** - логирование всех событий в `bot_events.log`
+- 📈 **Statistics** - отслеживание статистики использования бота
+
+## Требования
 
 - Python 3.8+
-- Flask (install with `pip install flask`)
-- requests
+- Виртуальное окружение (venv)
 
-## Running the server
+## Установка
+
+1. Клонируйте репозиторий или перейдите в директорию проекта
+
+2. Создайте виртуальное окружение (если еще не создано):
+```bash
+python -m venv venv
+```
+
+3. Активируйте виртуальное окружение:
+   - Windows: `venv\Scripts\activate`
+   - Linux/Mac: `source venv/bin/activate`
+
+4. Установите зависимости:
+```bash
+pip install -r requirements.txt
+```
+
+## Конфигурация
+
+Создайте файл `.env` или установите следующие переменные окружения:
+
+### Обязательные переменные:
+
+- `TELEGRAM_TOKEN` - токен Telegram-бота (получить у [@BotFather](https://t.me/BotFather))
+- `BITRIX_WEBHOOK` - входящий webhook Bitrix24 для CRM операций (например: `https://<domain>/rest/<user>/<token>`)
+- `BITRIX_OUT_HOOK` - исходящий webhook Bitrix24 для отправки сообщений
+- `GOOGLE_APPLICATION_CREDENTIALS` - путь к JSON-файлу service account для Google Drive API
+- `OPENAI_API_KEY` - API ключ OpenAI для работы ИИ-консультанта (получить на [platform.openai.com](https://platform.openai.com))
+
+### Опциональные переменные:
+
+- `OPENAI_MODEL` - модель OpenAI для консультаций (по умолчанию: `gpt-4o-mini`, можно использовать `gpt-3.5-turbo`, `gpt-4`)
+- `DRIVE_ROOT_FOLDER_ID` - ID папки в Google Drive для поиска файлов (если не указан, поиск по всему Drive)
+- `B24_DEFAULT_DIALOG` - ID диалога по умолчанию для Bitrix24 (по умолчанию: `chat1`)
+- `PUBLIC_URL` - публичный URL сервера (для webhook'ов)
+- `PUBLIC_HOSTNAME` - хостнейм сервера
+- `PUBLIC_SCHEME` - схема URL (по умолчанию: `https`)
+
+## Запуск
 
 ```bash
 python main.py
 ```
 
-The server listens on `0.0.0.0:8000` and provides the following endpoints:
+Сервер запустится на `0.0.0.0:8000`, и Telegram-бот начнет обрабатывать сообщения.
 
-- `GET /` returns a simple status message.
-- `POST /bitrix_hook` accepts JSON payloads, upserts Bitrix contacts via the REST API, and can send chat messages via the outgoing webhook. Requests without valid JSON receive a `400` response explaining the issue.
-- `GET /public_url` returns the best-known public URL for the currently running process.
+## API Endpoints
 
-### Bitrix configuration
+### GET /
 
-The application reads the following environment variables at startup:
+Проверка работоспособности сервера.
 
-- `BITRIX_WEBHOOK` – required for CRM operations (e.g., `https://<domain>/rest/<user>/<token>`).
-- `BITRIX_OUT_HOOK` – required to send chat messages with `im.message.add`. If absent, chat messages are disabled.
-- `B24_DEFAULT_DIALOG` – default chat ID used when the webhook payload does not include `dialog_id` (defaults to `chat1`).
+**Ответ:** `Server is running 🚀`
 
-The `/bitrix_hook` endpoint expects JSON objects with the following fields:
+### POST /bitrix_hook
 
-- `name` *(required)* – contact name.
-- `phone`, `email` *(optional)* – used to look up existing contacts.
-- `assigned_id` *(optional)* – Bitrix user ID that will own the contact.
-- `comment` *(optional)* – stored in the contact comments field (truncated to 2000 characters).
-- `message` *(optional)* – if present, sends a chat message using the configured outgoing webhook.
-- `dialog_id` *(optional)* – chat ID to use when sending a message; falls back to `B24_DEFAULT_DIALOG`.
+Обработка webhook'ов от Bitrix24 или других источников.
 
-The endpoint responds with the contact ID and whether the record was created or updated. If a chat message is sent, the response also includes the dialog ID and message status.
+**Тело запроса (JSON):**
+```json
+{
+  "name": "Иван Иванов",
+  "phone": "+79001234567",
+  "email": "ivan@example.com",
+  "message": "Хочу инвестировать 10000 в продукт X",
+  "product": "Продукт X",
+  "comment": "Дополнительный комментарий"
+}
+```
 
-### Public URL detection
+**Ответ:**
+```json
+{
+  "contact_id": 123,
+  "contact_status": "created",
+  "lead_id": 456,
+  "detected_intent": "invest",
+  "drive_files": []
+}
+```
 
-On startup the application attempts to detect a publicly reachable URL. You can override this behaviour by setting one of the following environment variables before launching the server:
+При `detected_intent == "documents"` в ответе будет массив `drive_files` с найденными файлами из Google Drive.
 
-- `PUBLIC_URL` – the full URL (including scheme) that should be displayed.
-- `PUBLIC_HOSTNAME` – a hostname that will be combined with the `PUBLIC_SCHEME` (defaults to `https`).
+### GET /public_url
 
-If automatic detection fails—common in restricted network environments—the server logs a warning and `/public_url` falls back to the host seen by the incoming request.
+Возвращает публичный URL сервера.
+
+**Ответ:**
+```json
+{
+  "public_url": "https://example.com"
+}
+```
+
+## Telegram Bot
+
+Бот работает как интеллектуальный консультант:
+
+1. **Принимает сообщения** от пользователей
+2. **Ведет диалог** с помощью ИИ-консультанта (OpenAI)
+3. **Узнает потребности** клиента через вопросы и консультацию
+4. **Определяет намерение** (intent) из текста сообщения
+5. **Ищет документы** в Google Drive (если intent = "documents")
+6. **Создает лид и контакт** только после подтверждения клиента
+
+### Команды бота:
+
+- `/start` - приветственное сообщение и начало консультации
+
+### Как работает бот:
+
+1. **Приветствие** - бот знакомится с клиентом
+2. **Консультация** - бот задает вопросы, узнает потребности
+3. **Подтверждение** - клиент подтверждает намерение
+4. **Создание лида** - только после подтверждения создается лид в Bitrix24
+
+### Примеры диалога:
+
+**Клиент:** "Здравствуйте"  
+**Бот:** "Здравствуйте! Я консультант MAXCAPITAL. Чем могу помочь?"
+
+**Клиент:** "Хочу инвестировать"  
+**Бот:** "Отлично! Какую сумму вы рассматриваете? Какие цели инвестирования?"
+
+**Клиент:** "10000 долларов, долгосрочные инвестиции"  
+**Бот:** "Понял. У нас есть несколько продуктов... [консультация] Готовы создать заявку?"
+
+**Клиент:** "Да, готов"  
+**Бот:** "✅ Отлично! Я создал заявку для вас. Наш менеджер свяжется с вами в ближайшее время."
+
+## Intent Detection
+
+Модуль `intent.py` определяет намерения пользователя на основе ключевых слов:
+
+- **invest** - инвестиции, капитал, фонды, вложения
+- **documents** - документы, презентации, файлы, проекты
+- **consult** - консультация, совет, рекомендация
+- **support** - поддержка, помощь, проблема
+
+Поддерживаются как английские, так и русские ключевые слова.
+
+## Google Drive Integration
+
+Модуль `gdrive_service.py` предоставляет:
+
+- `get_drive_service()` - создание сервиса Google Drive
+- `find_files_by_name(q_name, parent_folder_id)` - поиск файлов по имени
+- `download_file(file_id, dest_path)` - скачивание файла
+
+Поиск выполняется в папке, указанной в `DRIVE_ROOT_FOLDER_ID`, или по всему Drive, если переменная не установлена.
+
+## Логирование
+
+Все события логируются в файл `bot_events.log`:
+
+- `payload_received` - получен payload
+- `intent_detected` - определен intent
+- `contact_upserted` - контакт создан/обновлен
+- `lead_created` - лид создан
+- `drive_files_found` - найдены файлы в Google Drive
+- `telegram_message_received` - получено сообщение в Telegram
+- `telegram_message_sent` - отправлен ответ в Telegram
+- `telegram_command` - выполнена команда бота
+- `telegram_error` - ошибка при обработке сообщения
+
+## Тестирование
+
+См. файл `TEST_CURL.md` для примеров curl-запросов.
+
+## Структура проекта
+
+```
+.
+├── main.py              # Основной файл с Flask-сервером и Telegram-ботом
+├── intent.py            # Модуль определения намерений
+├── gdrive_service.py    # Модуль работы с Google Drive
+├── requirements.txt     # Зависимости проекта
+├── TEST_CURL.md         # Примеры тестовых запросов
+├── bot_events.log       # Файл логов (создается автоматически)
+└── README.md           # Этот файл
+```
+
+## Разработка
+
+Для разработки рекомендуется использовать виртуальное окружение и следовать PEP 8.
+
+## Лицензия
+
+См. файл LICENSE.
