@@ -370,6 +370,53 @@ class Database:
             logger.error(f"Error getting user session: {e}")
             return None
     
+    def get_session_messages(self, session_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get conversation history from database for a session."""
+        if not self.is_available():
+            return []
+        
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT message_text, message_type, detected_intent, created_at
+                        FROM bot_messages
+                        WHERE session_id = %s
+                        ORDER BY created_at ASC
+                        LIMIT %s
+                    """, (session_id, limit))
+                    messages = cur.fetchall()
+                    # Convert to format expected by AI: [{"role": "user/assistant", "content": "..."}]
+                    result = []
+                    for msg in messages:
+                        role = "user" if msg['message_type'] == "user" else "assistant"
+                        result.append({
+                            "role": role,
+                            "content": msg['message_text']
+                        })
+                    return result
+        except Exception as e:
+            logger.error(f"Error getting session messages: {e}")
+            return []
+    
+    def get_session_lead_id(self, session_id: int) -> Optional[int]:
+        """Get lead_id for a session if it exists."""
+        if not self.is_available():
+            return None
+        
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT lead_id FROM bot_sessions
+                        WHERE id = %s
+                    """, (session_id,))
+                    result = cur.fetchone()
+                    return result['lead_id'] if result and result['lead_id'] else None
+        except Exception as e:
+            logger.error(f"Error getting session lead_id: {e}")
+            return None
+    
     def get_statistics(self) -> Dict[str, Any]:
         """Get bot statistics."""
         if not self.is_available():

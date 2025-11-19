@@ -3,6 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 gdrive_credentials.json
+service-account-credentials.json
 
 # C extensions
 *.so

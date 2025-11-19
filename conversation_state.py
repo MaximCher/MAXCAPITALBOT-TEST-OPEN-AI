@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import os
 
+import db
 
 CONVERSATION_STATE_FILE = "conversation_states.json"
 
@@ -130,8 +131,26 @@ class ConversationState:
         user_state["last_updated"] = datetime.now().isoformat()
         self._save_states()
     
-    def get_conversation_history(self, user_id: int) -> List[Dict[str, str]]:
-        """Get conversation history formatted for AI."""
+    def get_conversation_history(self, user_id: int, db_session_id: Optional[int] = None) -> List[Dict[str, str]]:
+        """Get conversation history formatted for AI.
+        
+        Args:
+            user_id: Telegram user ID
+            db_session_id: Optional database session ID to load history from DB
+        
+        Returns:
+            List of messages in format [{"role": "user/assistant", "content": "..."}]
+        """
+        # Try to load from database first if db_session_id is provided
+        if db_session_id and db.database.is_available():
+            try:
+                db_history = db.database.get_session_messages(db_session_id, limit=50)
+                if db_history:
+                    return db_history
+            except Exception as e:
+                print(f"Error loading history from database: {e}")
+        
+        # Fallback to JSON file
         user_state = self.get_state(user_id)
         # Format for AI API (only role and content)
         return [
@@ -146,35 +165,51 @@ class ConversationState:
             del self.states[user_key]
             self._save_states()
     
-    def is_ready_for_lead(self, user_id: int) -> bool:
-        """Check if conversation is ready to create lead."""
+    def is_ready_for_lead(self, user_id: int, telegram_user: Optional[Any] = None) -> bool:
+        """Check if conversation is ready to create lead.
+        
+        Args:
+            user_id: Telegram user ID
+            telegram_user: Optional Telegram user object to check for name in profile
+        """
         user_state = self.get_state(user_id)
         collected_info = user_state.get("collected_info", {})
         
         # Ready if:
         # 1. We have phone number (REQUIRED!)
-        # 2. User has services or intent detected
-        # Phone is the most important - if we have it and services, create lead
+        # 2. We have at least first_name OR last_name (from message or Telegram profile)
+        # Phone and name are the most important - if we have both, create lead
         
         has_phone = bool(collected_info.get("phone"))
         if not has_phone:
             return False  # Phone is mandatory
         
+        # Check if we have at least first name or last name from collected info
+        has_name = bool(collected_info.get("first_name") or collected_info.get("last_name"))
+        
+        # If we have phone and name, create lead immediately
+        # Services/intent are optional - we can create lead with just phone and name
+        if has_phone and has_name:
+            return True
+        
+        # Fallback: if we have phone and Telegram user has name, also create lead
+        # This handles cases where user provided phone but name is in Telegram profile
+        if telegram_user and has_phone:
+            if telegram_user.first_name or telegram_user.last_name or telegram_user.username:
+                return True
+        
+        # Fallback: if we have phone and services/intent, also create lead (even without explicit name)
+        # This handles cases where user didn't provide name but mentioned services
         has_services = (
             len(user_state.get("selected_services", [])) > 0 or
             len(user_state.get("detected_services", [])) > 0 or
             user_state.get("detected_intent") is not None
         )
         
-        # If we have phone and services, create lead
-        # Don't require confirmed_intent if we have services detected
-        current_state = user_state.get("state", "greeting")
+        if has_phone and has_services:
+            return True
         
-        return (
-            has_phone and
-            has_services and
-            current_state in ["collecting_data", "consulting", "completed", "greeting"]  # Allow all states if we have phone and services
-        )
+        return False
     
     def has_collected_all_data(self, user_id: int) -> bool:
         """Check if all required data is collected."""

@@ -26,6 +26,7 @@
 ```bash
 python -m venv venv
 ```
+Set-ExecutionPolicy RemoteSigned
 
 3. Активируйте виртуальное окружение:
    - Windows: `venv\Scripts\activate`

@@ -549,6 +549,259 @@
       "converted_to_lead": false,
       "lead_id": null,
       "contact_id": null
+    },
+    "1019677560_1763526250.605922": {
+      "user_id": 1019677560,
+      "db_session_id": 3,
+      "username": "jklazer",
+      "first_name": "klazer",
+      "started_at": "2025-11-19T09:24:10.605922",
+      "messages": [
+        {
+          "text": "не могу разобраться с консультациями",
+          "intent": "consult",
+          "timestamp": "2025-11-19T09:24:10.828817"
+        }
+      ],
+      "intents": [
+        "consult"
+      ],
+      "converted_to_lead": false,
+      "lead_id": null,
+      "contact_id": null
+    },
+    "182507322_1763526257.399802": {
+      "user_id": 182507322,
+      "db_session_id": 4,
+      "username": "chereshnev",
+      "first_name": "Maxim",
+      "started_at": "2025-11-19T09:24:17.399802",
+      "messages": [],
+      "intents": [],
+      "converted_to_lead": false,
+      "lead_id": null,
+      "contact_id": null
+    },
+    "182507322_1763526258.394126": {
+      "user_id": 182507322,
+      "db_session_id": 5,
+      "username": "chereshnev",
+      "first_name": "Maxim",
+      "started_at": "2025-11-19T09:24:18.394126",
+      "messages": [],
+      "intents": [],
+      "converted_to_lead": false,
+      "lead_id": null,
+      "contact_id": null
+    },
+    "303359781_1763531586.806434": {
+      "user_id": 303359781,
+      "db_session_id": 6,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-19T10:53:06.806434",
+      "messages": [
+        {
+          "text": "криптовалюта",
+          "intent": null,
+          "timestamp": "2025-11-19T10:53:22.416424"
+        },
+        {
+          "text": "Интересует биткоин",
+          "intent": null,
+          "timestamp": "2025-11-19T10:53:38.946727"
+        },
+        {
+          "text": "Егор Булаткин, 87018284367",
+          "intent": null,
+          "timestamp": "2025-11-19T10:54:00.518228"
+        },
+        {
+          "text": "Попробуйте еще раз",
+          "intent": null,
+          "timestamp": "2025-11-19T10:54:37.556090"
+        },
+        {
+          "text": "Spasbio",
+          "intent": null,
+          "timestamp": "2025-11-19T11:19:20.129843"
+        },
+        {
+          "text": "Все спасибо",
+          "intent": null,
+          "timestamp": "2025-11-19T11:19:31.602495"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 140,
+      "contact_id": null,
+      "converted_at": "2025-11-19T10:54:43.815807"
+    },
+    "303359781_1763533631.015117": {
+      "user_id": 303359781,
+      "db_session_id": 7,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-19T11:27:11.015117",
+      "messages": [
+        {
+          "text": "Интересует крипта",
+          "intent": null,
+          "timestamp": "2025-11-19T11:27:17.942566"
+        },
+        {
+          "text": "Локтар Угар, 81912945788",
+          "intent": null,
+          "timestamp": "2025-11-19T11:27:34.715711"
+        },
+        {
+          "text": "Спасибо, жду",
+          "intent": null,
+          "timestamp": "2025-11-19T11:28:30.749955"
+        },
+        {
+          "text": "Зачем еще раз?",
+          "intent": null,
+          "timestamp": "2025-11-19T11:28:40.343245"
+        },
+        {
+          "text": "Спасибо",
+          "intent": null,
+          "timestamp": "2025-11-19T11:28:56.332524"
+        }
+      ],
+      "intents": [],
+      "converted_to_lead": true,
+      "lead_id": 146,
+      "contact_id": null,
+      "converted_at": "2025-11-19T11:27:39.926268"
+    },
+    "303359781_1763534074.06304": {
+      "user_id": 303359781,
+      "db_session_id": 8,
+      "username": "theRoone",
+      "first_name": "Alisher",
+      "started_at": "2025-11-19T11:34:34.063040",
+      "messages": [
+        {
+          "text": "крипта",
+          "intent": null,
+          "timestamp": "2025-11-19T11:34:38.887778"
+        },
+        {
+          "text": "Хочу инвестировать в биткоин и трампкоин",
+          "intent": "invest",
+          "timestamp": "2025-11-19T11:34:58.643061"
+        },
+        {
+          "text": "Егор Фалафель, 873818239456",
+          "intent": null,
+          "timestamp": "2025-11-19T11:35:18.466720"
+        },
+        {
+          "text": "Спасибо",
+          "intent": null,
+          "timestamp": "2025-11-19T11:35:41.641358"
+        },
+        {
+          "text": "Можно создать еще одну заявку?",
+          "intent": null,
+          "timestamp": "2025-11-19T11:35:55.675842"
+        },
+        {
+          "text": "По поводу ВНЖ, меня зовут Керамбит Батырханович, 87018188282",
+          "intent": null,
+          "timestamp": "2025-11-19T11:36:29.883906"
+        },
+        {
+          "text": "Китай, ВНЖ, 10 лет",
+          "intent": null,
+          "timestamp": "2025-11-19T11:37:00.827064"
+        },
+        {
+          "text": "Ничего нет",
+          "intent": null,
+          "timestamp": "2025-11-19T11:37:12.685514"
+        },
+        {
+          "text": "Любой",
+          "intent": null,
+          "timestamp": "2025-11-19T11:37:22.755308"
+        },
+        {
+          "text": "Все",
+          "intent": null,
+          "timestamp": "2025-11-19T11:37:37.280856"
+        },
+        {
+          "text": "Работа",
+          "intent": null,
+          "timestamp": "2025-11-19T11:37:50.835515"
+        },
+        {
+          "text": "Программирование",
+          "intent": null,
+          "timestamp": "2025-11-19T11:38:03.585558"
+        },
+        {
+          "text": "Большой опыт программирования",
+          "intent": null,
+          "timestamp": "2025-11-19T11:38:17.382114"
+        },
+        {
+          "text": "Фронтенд",
+          "intent": null,
+          "timestamp": "2025-11-19T11:38:28.832231"
+        },
+        {
+          "text": "React",
+          "intent": null,
+          "timestamp": "2025-11-19T11:38:45.426338"
+        },
+        {
+          "text": "Много работал, давайте уже записывайте к менеджеру",
+          "intent": null,
+          "timestamp": "2025-11-19T11:39:08.315578"
+        },
+        {
+          "text": "87051812356",
+          "intent": null,
+          "timestamp": "2025-11-19T11:39:26.174860"
+        },
+        {
+          "text": "Вы же уже знаете",
+          "intent": null,
+          "timestamp": "2025-11-19T11:39:34.108323"
+        },
+        {
+          "text": "Да",
+          "intent": null,
+          "timestamp": "2025-11-19T11:39:42.691299"
+        },
+        {
+          "text": "Вы лид создали?",
+          "intent": null,
+          "timestamp": "2025-11-19T11:39:56.248321"
+        },
+        {
+          "text": "Вы кажется в Битриксе лид не создали",
+          "intent": null,
+          "timestamp": "2025-11-19T11:40:12.234183"
+        },
+        {
+          "text": "Создавайте лида, все верно",
+          "intent": null,
+          "timestamp": "2025-11-19T11:40:43.998826"
+        }
+      ],
+      "intents": [
+        "invest"
+      ],
+      "converted_to_lead": true,
+      "lead_id": 148,
+      "contact_id": null,
+      "converted_at": "2025-11-19T11:35:22.440255"
     }
   },
   "daily_stats": {
@@ -558,12 +811,21 @@
       "intents": {
         "invest": 9
       }
+    },
+    "2025-11-19": {
+      "sessions": 6,
+      "leads": 3,
+      "intents": {
+        "consult": 1,
+        "invest": 1
+      }
     }
   },
   "intent_stats": {
-    "invest": 9
+    "invest": 10,
+    "consult": 1
   },
-  "lead_conversions": 11,
-  "total_sessions": 14,
-  "total_leads": 11
+  "lead_conversions": 14,
+  "total_sessions": 20,
+  "total_leads": 14
 }

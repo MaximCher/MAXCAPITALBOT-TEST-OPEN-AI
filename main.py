@@ -826,6 +826,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 collected_info = conv_state.get("collected_info", {})
                 logger.info(f"Updated collected info: {collected_info}")
         
+        # Also try to extract phone/name from current message even if not in collecting_data state
+        # This ensures we capture data whenever user provides it
+        if not collected_info.get("phone"):
+            phone = extract_phone(message_text)
+            if phone:
+                collected_info["phone"] = phone
+                logger.info(f"Extracted phone from message: {phone}")
+                conversation_state.conversation_state.update_state(user.id, info=collected_info)
+        
+        if not collected_info.get("first_name") and not collected_info.get("last_name"):
+            name_data = extract_name(message_text)
+            if name_data:
+                if name_data.get("first_name"):
+                    collected_info["first_name"] = name_data["first_name"]
+                if name_data.get("last_name"):
+                    collected_info["last_name"] = name_data["last_name"]
+                logger.info(f"Extracted name from message: {name_data}")
+                conversation_state.conversation_state.update_state(user.id, info=collected_info)
+        
         # Update conversation state (this adds user message to history)
         conversation_state.conversation_state.update_state(
             user.id,
@@ -839,8 +858,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Update statistics
         statistics.stats.add_message(session_id, message_text, detected_intent, detected_services_list)
         
-        # Get conversation history for AI
-        history = conversation_state.conversation_state.get_conversation_history(user.id)
+        # Get database session ID for loading history from DB
+        db_session_id = None
+        if db.database.is_available() and session_id in statistics.stats.stats["sessions"]:
+            db_session_id = statistics.stats.stats["sessions"][session_id].get("db_session_id")
+        
+        # Get conversation history for AI (from DB if available)
+        history = conversation_state.conversation_state.get_conversation_history(user.id, db_session_id=db_session_id)
         
         # Prepare context for AI
         ai_context = {
@@ -913,7 +937,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         # Check if we have all data and can create lead
         # Check AFTER extracting phone/name from current message
-        should_create_lead = conversation_state.conversation_state.is_ready_for_lead(user.id)
+        should_create_lead = conversation_state.conversation_state.is_ready_for_lead(user.id, telegram_user=user)
         
         logger.info(f"=== LEAD CREATION CHECK ===")
         logger.info(f"Should create lead: {should_create_lead}")
@@ -928,200 +952,251 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # This ensures the last bot message is in history
         conversation_state.conversation_state.add_assistant_message(user.id, ai_response)
         
+        # Save assistant message to database
+        if db_session_id:
+            try:
+                db.database.add_message(
+                    session_id=db_session_id,
+                    message_text=ai_response,
+                    message_type="assistant",
+                    detected_intent=None,
+                    detected_services=None
+                )
+            except Exception as e:
+                logger.error(f"Error saving assistant message to database: {e}")
+        
         # Create contact and lead if ready
         contact_id = None
         lead_id = None
         if should_create_lead:
-            try:
-                config = app.config["BITRIX"]
-                first_name = collected_info.get("first_name") or user.first_name or ""
-                last_name = collected_info.get("last_name") or user.last_name or ""
-                phone = collected_info.get("phone")
-                
-                name = f"{first_name} {last_name}".strip() or user.username or f"User_{user.id}"
-                
-                # Get services info for comment
-                selected_services = conv_state.get("selected_services", [])
-                detected_services = conv_state.get("detected_services", [])
-                all_services = selected_services if selected_services else detected_services
-                
-                services_list = []
-                if all_services:
-                    for service in all_services:
-                        service_name = service.get("name", service.get("code", ""))
-                        services_list.append(f"• {service_name}")
-                    services_text = "\n".join(services_list)
-                else:
-                    services_text = "Не указаны"
-                
-                # Build summary comment for Bitrix24 (brief, one paragraph)
-                # Extract key information from conversation
-                full_state = conversation_state.conversation_state.get_state(user.id)
-                history = full_state.get("conversation_history", [])
-                
-                # Extract user's key messages and interests
-                user_messages = []
-                key_info = []
-                
-                for msg in history:
-                    role = msg.get("role", "")
-                    content = msg.get("content", "")
-                    if role == "user" and content:
-                        user_messages.append(content)
-                    elif role == "assistant" and content:
-                        # Extract questions bot asked to understand what client wants
-                        if "?" in content or "какую" in content.lower() or "какой" in content.lower():
-                            key_info.append(content[:100])
-                
-                # Build services summary
-                services_summary = ", ".join([s.get("name", s.get("code", "")).split("(")[0].strip() for s in all_services]) if all_services else "не указаны"
-                
-                # Build brief summary
-                summary_parts = []
-                summary_parts.append(f"Клиент интересуется услугами: {services_summary}.")
-                
-                # Add key user messages (what client wants)
-                if user_messages:
-                    # Get last few user messages that contain actual requests
-                    relevant_messages = []
-                    for msg in user_messages[-5:]:  # Last 5 user messages
-                        if len(msg) > 10 and not msg.lower().startswith(("да", "нет", "хорошо", "ок")):
-                            relevant_messages.append(msg[:150])
-                    
-                    if relevant_messages:
-                        client_wants = " ".join(relevant_messages[:2])  # First 2 relevant messages
-                        summary_parts.append(f"Клиент сообщил: {client_wants}.")
-                
-                # Add intent if available
-                intent = conv_state.get('detected_intent')
-                if intent:
-                    intent_names = {
-                        "invest": "инвестиции",
-                        "documents": "документы",
-                        "consult": "консультация",
-                        "support": "поддержка"
-                    }
-                    intent_ru = intent_names.get(intent, intent)
-                    summary_parts.append(f"Тип запроса: {intent_ru}.")
-                
-                # Join summary into one paragraph
-                summary = " ".join(summary_parts)
-                
-                # Build comment with HTML line breaks for Bitrix24
-                comment = f"<b>Краткая информация о клиенте:</b><br><br>{summary}"
-                
-                logger.info(f"Summary comment length: {len(comment)}")
-                logger.info(f"Summary: {summary}")
-                
-                # Truncate if too long (Bitrix24 limit is 2000 chars)
-                if len(comment) > 2000:
-                    comment = comment[:1997] + "..."
-                
-                logger.info(f"Final comment length: {len(comment)}")
-                logger.info(f"Comment that will be sent to Bitrix24:\n{comment}")
-                
-                # Create contact
+            # Check if lead already exists for this session (only when trying to create)
+            existing_lead_id = None
+            if db_session_id:
                 try:
-                    contact_id, status = upsert_contact(
-                        config,
-                        name=name,
-                        phone=phone,
-                        email=None,
-                        comment=comment
-                    )
+                    existing_lead_id = db.database.get_session_lead_id(db_session_id)
                 except Exception as e:
-                    logger.error(f"Failed to create contact: {e}")
-                
-                # Create lead - MUST create if we reached this point
-                if not config.inbound_webhook:
-                    logger.error("Cannot create lead: inbound_webhook is not configured")
-                    ai_response += "\n\n⚠️ Произошла ошибка конфигурации. Пожалуйста, обратитесь к администратору."
-                elif not phone:
-                    logger.error(f"Cannot create lead: phone is missing. Collected info: {collected_info}")
-                    ai_response += "\n\n⚠️ Для создания заявки необходим номер телефона. Пожалуйста, предоставьте его."
-                else:
+                    logger.error(f"Error checking existing lead: {e}")
+            
+            # Also check in statistics JSON
+            if not existing_lead_id and session_id in statistics.stats.stats["sessions"]:
+                existing_lead_id = statistics.stats.stats["sessions"][session_id].get("lead_id")
+            
+            # Only create lead if it doesn't exist yet
+            if existing_lead_id:
+                logger.info(f"Lead already exists for this session (ID: {existing_lead_id}), skipping creation")
+                # Don't block conversation - just skip lead creation and continue dialog
+            else:
+                try:
+                    config = app.config["BITRIX"]
+                    first_name = collected_info.get("first_name") or user.first_name or ""
+                    last_name = collected_info.get("last_name") or user.last_name or ""
+                    phone = collected_info.get("phone")
+                    
+                    name = f"{first_name} {last_name}".strip() or user.username or f"User_{user.id}"
+                    
+                    # Get services info for comment
+                    selected_services = conv_state.get("selected_services", [])
+                    detected_services = conv_state.get("detected_services", [])
+                    all_services = selected_services if selected_services else detected_services
+                    
+                    services_list = []
+                    if all_services:
+                        for service in all_services:
+                            service_name = service.get("name", service.get("code", ""))
+                            services_list.append(f"• {service_name}")
+                        services_text = "\n".join(services_list)
+                    else:
+                        services_text = "Не указаны"
+                    
+                    # Build summary comment for Bitrix24 (brief, one paragraph)
+                    # Extract key information from conversation
+                    full_state = conversation_state.conversation_state.get_state(user.id)
+                    history = full_state.get("conversation_history", [])
+                    
+                    # Extract user's key messages and interests
+                    user_messages = []
+                    key_info = []
+                    
+                    for msg in history:
+                        role = msg.get("role", "")
+                        content = msg.get("content", "")
+                        if role == "user" and content:
+                            user_messages.append(content)
+                        elif role == "assistant" and content:
+                            # Extract questions bot asked to understand what client wants
+                            if "?" in content or "какую" in content.lower() or "какой" in content.lower():
+                                key_info.append(content[:100])
+                    
+                    # Build services summary
+                    services_summary = ", ".join([s.get("name", s.get("code", "")).split("(")[0].strip() for s in all_services]) if all_services else "не указаны"
+                    
+                    # Build brief summary
+                    summary_parts = []
+                    summary_parts.append(f"Клиент интересуется услугами: {services_summary}.")
+                    
+                    # Add key user messages (what client wants)
+                    if user_messages:
+                        # Get last few user messages that contain actual requests
+                        relevant_messages = []
+                        for msg in user_messages[-5:]:  # Last 5 user messages
+                            if len(msg) > 10 and not msg.lower().startswith(("да", "нет", "хорошо", "ок")):
+                                relevant_messages.append(msg[:150])
+                        
+                        if relevant_messages:
+                            client_wants = " ".join(relevant_messages[:2])  # First 2 relevant messages
+                            summary_parts.append(f"Клиент сообщил: {client_wants}.")
+                    
+                    # Add intent if available
+                    intent = conv_state.get('detected_intent')
+                    if intent:
+                        intent_names = {
+                            "invest": "инвестиции",
+                            "documents": "документы",
+                            "consult": "консультация",
+                            "support": "поддержка"
+                        }
+                        intent_ru = intent_names.get(intent, intent)
+                        summary_parts.append(f"Тип запроса: {intent_ru}.")
+                    
+                    # Join summary into one paragraph
+                    summary = " ".join(summary_parts)
+                    
+                    # Build comment with HTML line breaks for Bitrix24
+                    comment = f"<b>Краткая информация о клиенте:</b><br><br>{summary}"
+                    
+                    logger.info(f"Summary comment length: {len(comment)}")
+                    logger.info(f"Summary: {summary}")
+                    
+                    # Truncate if too long (Bitrix24 limit is 2000 chars)
+                    if len(comment) > 2000:
+                        comment = comment[:1997] + "..."
+                    
+                    logger.info(f"Final comment length: {len(comment)}")
+                    logger.info(f"Comment that will be sent to Bitrix24:\n{comment}")
+                    
+                    # Create contact
                     try:
-                        service_codes = [s.get("code") for s in all_services] if all_services else None
-                        
-                        # Create lead title with service info
-                        lead_title = name
-                        if all_services:
-                            # Add first service to title if available
-                            first_service_name = all_services[0].get("name", "").split("(")[0].strip()
-                            if first_service_name:
-                                lead_title = f"{name} - {first_service_name}"
-                        
-                        # Log comment before sending to Bitrix24
-                        logger.info(f"=== CREATING LEAD ===")
-                        logger.info(f"Name: {name}")
-                        logger.info(f"Phone: {phone}")
-                        logger.info(f"Services: {service_codes}")
-                        logger.info(f"Comment length: {len(comment)}")
-                        logger.info(f"Comment content:\n{comment}")
-                        
-                        lead_id = create_lead(
+                        contact_id, status = upsert_contact(
                             config,
-                            name=lead_title,
+                            name=name,
                             phone=phone,
                             email=None,
-                            comment=comment,
-                            intent=conv_state.get("detected_intent")
+                            comment=comment
                         )
-                        
-                        logger.info(f"✅ Lead created successfully with ID: {lead_id}")
-                        
-                        # Mark as lead in statistics
-                        statistics.stats.convert_to_lead(
-                            session_id, 
-                            lead_id, 
-                            contact_id,
-                            services_interested=service_codes
-                        )
-                        
-                        # Update database session
-                        if db.database.is_available() and session_id in statistics.stats.stats["sessions"]:
-                            db_session_id = statistics.stats.stats["sessions"][session_id].get("db_session_id")
-                            if db_session_id:
-                                try:
-                                    db.database.update_session(
-                                        session_id=db_session_id,
-                                        status="converted_to_lead",
-                                        services_interested=service_codes,
-                                        lead_id=lead_id,
-                                        contact_id=contact_id
-                                    )
-                                except Exception as e:
-                                    logger.error(f"Error updating database session: {e}")
-                        
-                        # Update conversation state
-                        conversation_state.conversation_state.update_state(
-                            user.id,
-                            state="completed"
-                        )
-                        
-                        # Replace AI response with confirmation message
-                        ai_response = (
-                            "✅ Отлично! Я создал заявку для вас. Наш менеджер свяжется с вами в ближайшее время.\n\n"
-                            f"📋 Номер заявки: {lead_id}\n\n"
-                            "Спасибо за обращение в MAXCAPITAL!"
-                        )
-                        
-                        # Update assistant message in history
-                        conversation_state.conversation_state.add_assistant_message(user.id, ai_response)
-                        
-                        log_event("lead_created_after_confirmation", {
-                            "user_id": user.id,
-                            "lead_id": lead_id,
-                            "contact_id": contact_id,
-                            "intent": conv_state.get("detected_intent"),
-                            "services": service_codes,
-                            "session_id": session_id
-                        })
                     except Exception as e:
-                        logger.error(f"Failed to create lead: {e}", exc_info=True)
-                        ai_response += "\n\n⚠️ Произошла ошибка при создании заявки. Попробуйте позже."
-            except Exception as e:
-                logger.exception("Error creating contact/lead")
+                        logger.error(f"Failed to create contact: {e}")
+                    
+                    # Create lead - MUST create if we reached this point
+                    service_codes = [s.get("code") for s in all_services] if all_services else None
+                    
+                    # Create lead title with service info
+                    lead_title = name
+                    if all_services:
+                        # Add first service to title if available
+                        first_service_name = all_services[0].get("name", "").split("(")[0].strip()
+                        if first_service_name:
+                            lead_title = f"{name} - {first_service_name}"
+                    
+                    # Log comment before sending to Bitrix24
+                    logger.info(f"=== CREATING LEAD ===")
+                    logger.info(f"Config inbound_webhook exists: {bool(config.inbound_webhook)}")
+                    logger.info(f"Name: {name}")
+                    logger.info(f"Lead title: {lead_title}")
+                    logger.info(f"Phone: {phone}")
+                    logger.info(f"Services: {service_codes}")
+                    logger.info(f"Comment length: {len(comment)}")
+                    logger.info(f"Comment content:\n{comment}")
+                    
+                    if not config.inbound_webhook:
+                        logger.error("❌ CANNOT CREATE LEAD: inbound_webhook is not configured!")
+                        ai_response += "\n\n⚠️ Произошла ошибка конфигурации. Пожалуйста, обратитесь к администратору."
+                    elif not phone:
+                        logger.error(f"❌ CANNOT CREATE LEAD: phone is missing. Collected info: {collected_info}")
+                        ai_response += "\n\n⚠️ Для создания заявки необходим номер телефона. Пожалуйста, предоставьте его."
+                    else:
+                        try:
+                            lead_id = create_lead(
+                                config,
+                                name=lead_title,
+                                phone=phone,
+                                email=None,
+                                comment=comment,
+                                intent=conv_state.get("detected_intent")
+                            )
+                            
+                            if lead_id:
+                                logger.info(f"✅ Lead created successfully with ID: {lead_id}")
+                                
+                                # Mark as lead in statistics
+                                statistics.stats.convert_to_lead(
+                                    session_id, 
+                                    lead_id, 
+                                    contact_id,
+                                    services_interested=service_codes
+                                )
+                                
+                                # Update database session
+                                if db.database.is_available() and session_id in statistics.stats.stats["sessions"]:
+                                    db_session_id = statistics.stats.stats["sessions"][session_id].get("db_session_id")
+                                    if db_session_id:
+                                        try:
+                                            db.database.update_session(
+                                                session_id=db_session_id,
+                                                status="converted_to_lead",
+                                                services_interested=service_codes,
+                                                lead_id=lead_id,
+                                                contact_id=contact_id
+                                            )
+                                        except Exception as e:
+                                            logger.error(f"Error updating database session: {e}")
+                                
+                                # Update conversation state
+                                conversation_state.conversation_state.update_state(
+                                    user.id,
+                                    state="completed"
+                                )
+                                
+                                # Replace AI response with confirmation message
+                                ai_response = (
+                                    "✅ Отлично! Я создал заявку для вас. Наш менеджер свяжется с вами в ближайшее время.\n\n"
+                                    f"📋 Номер заявки: {lead_id}\n\n"
+                                    "Спасибо за обращение в MAXCAPITAL!"
+                                )
+                                
+                                # Update assistant message in history
+                                conversation_state.conversation_state.add_assistant_message(user.id, ai_response)
+                                
+                                # Save updated assistant message to database
+                                if db_session_id:
+                                    try:
+                                        db.database.add_message(
+                                            session_id=db_session_id,
+                                            message_text=ai_response,
+                                            message_type="assistant",
+                                            detected_intent=None,
+                                            detected_services=None
+                                        )
+                                    except Exception as e:
+                                        logger.error(f"Error saving updated assistant message to database: {e}")
+                                
+                                log_event("lead_created_after_confirmation", {
+                                    "user_id": user.id,
+                                    "lead_id": lead_id,
+                                    "contact_id": contact_id,
+                                    "intent": conv_state.get("detected_intent"),
+                                    "services": service_codes,
+                                    "session_id": session_id
+                                })
+                            else:
+                                logger.error("❌ ERROR: create_lead returned None or 0! Lead may not have been created in Bitrix24!")
+                                ai_response += "\n\n⚠️ Произошла ошибка при создании заявки. Попробуйте позже."
+                                raise Exception("create_lead returned invalid ID")
+                        except Exception as e:
+                            logger.error(f"❌ ERROR creating lead: {e}", exc_info=True)
+                            ai_response += "\n\n⚠️ Произошла ошибка при создании заявки. Попробуйте позже."
+                            raise  # Re-raise to be caught by outer except
+                except Exception as e:
+                    logger.exception("Error creating contact/lead")
         
         # Update conversation state based on response
         if (detected_intent or detected_services_list) and not conv_state.get("confirmed_intent"):
