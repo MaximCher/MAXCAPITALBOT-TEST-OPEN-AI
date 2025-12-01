@@ -77,11 +77,20 @@ async def handle_service_selection(
 Я готов проконсультировать вас по данной услуге. 
 
 Задайте ваши вопросы, расскажите о ваших целях и задачах. 
-Я предоставлю детальную информацию на основе экспертизы MAXCAPITAL.
-
-[Чтобы завершить консультацию и ожидать звонка менеджера, напишите /call]"""
+Я предоставлю детальную информацию на основе экспертизы MAXCAPITAL."""
     
-    await callback.message.edit_text(text=consultation_text)
+    # Add finish dialog button
+    finish_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✅ Завершить диалог",
+            callback_data="finish_dialog"
+        )]
+    ])
+    
+    await callback.message.edit_text(
+        text=consultation_text,
+        reply_markup=finish_keyboard
+    )
     
     await callback.answer()
     
@@ -95,17 +104,35 @@ async def handle_service_selection(
 @router.callback_query(F.data == "consultation")
 async def handle_consultation_request(
     callback: CallbackQuery,
-    state: FSMContext
+    state: FSMContext,
+    session: AsyncSession
 ):
     """Handle general consultation request"""
-    await callback.message.edit_text(
-        text=MESSAGES["consultation"],
-        reply_markup=get_back_keyboard()
+    user_id = callback.from_user.id
+    
+    # Clear state and enable consultation mode
+    await state.clear()
+    await state.update_data(
+        consultation_mode=True,
+        consultation_started=True
     )
     
-    # Clear state to allow free chat
-    await state.clear()
-    await state.update_data(consultation_mode=True)
+    # Add finish dialog button
+    finish_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✅ Завершить диалог",
+            callback_data="finish_dialog"
+        )],
+        [InlineKeyboardButton(
+            text="⬅️ Назад к услугам",
+            callback_data="back_to_services"
+        )]
+    ])
+    
+    await callback.message.edit_text(
+        text=MESSAGES["consultation"],
+        reply_markup=finish_keyboard
+    )
     
     await callback.answer()
     

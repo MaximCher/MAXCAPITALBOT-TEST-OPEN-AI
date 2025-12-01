@@ -5,7 +5,7 @@ Handles all environment variables and app settings
 
 from pydantic_settings import BaseSettings
 from pydantic import Field
-from typing import Optional
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
@@ -13,7 +13,21 @@ class Settings(BaseSettings):
     
     # Telegram Bot
     telegram_bot_token: str = Field(..., alias="TELEGRAM_BOT_TOKEN")
-    manager_chat_id: str = Field(..., alias="MANAGER_CHAT_ID")
+    manager_chat_id: str = Field(..., alias="MANAGER_CHAT_ID")  # Legacy support
+    manager_chat_ids: Optional[str] = Field(default=None, alias="MANAGER_CHAT_IDS")  # Comma-separated list
+    
+    @property
+    def manager_chat_ids_list(self) -> List[str]:
+        """Get list of manager chat IDs"""
+        if self.manager_chat_ids:
+            # Parse comma-separated list
+            ids = [id.strip() for id in self.manager_chat_ids.split(",") if id.strip()]
+            # Also include legacy single chat_id if not already in list
+            if self.manager_chat_id and self.manager_chat_id not in ids:
+                ids.append(self.manager_chat_id)
+            return ids
+        # Fallback to single chat_id
+        return [self.manager_chat_id] if self.manager_chat_id else []
     
     # PostgreSQL Database
     postgres_host: str = Field(default="db", alias="POSTGRES_HOST")
@@ -37,6 +51,11 @@ class Settings(BaseSettings):
     # App Settings
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     debug_mode: bool = Field(default=False, alias="DEBUG_MODE")
+    
+    # Web Server Settings
+    web_host: str = Field(default="0.0.0.0", alias="WEB_HOST")
+    web_port: int = Field(default=8000, alias="WEB_PORT")
+    chat_history_password: str = Field(default="ChangeThisPassword123!", alias="CHAT_HISTORY_PASSWORD")
     
     class Config:
         env_file = ".env"

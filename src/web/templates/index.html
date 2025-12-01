@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAXCAPITAL Bot - Admin Panel</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="login-screen" class="login-container">
+        <div class="login-box">
+            <div class="logo-3d">MAXCAPITAL</div>
+            <h2>Admin Panel</h2>
+            <p class="subtitle">История сообщений</p>
+            <form id="login-form">
+                <input type="password" id="password-input" placeholder="Введите пароль" autocomplete="off">
+                <button type="submit">Войти</button>
+            </form>
+            <div id="login-error" class="error-message"></div>
+        </div>
+    </div>
+
+    <div id="admin-panel" class="admin-panel hidden">
+        <header class="header-3d">
+            <h1>MAXCAPITAL Bot Admin</h1>
+            <button id="logout-btn" class="logout-btn">Выйти</button>
+        </header>
+
+        <div class="statistics-panel">
+            <div class="stat-card">
+                <div class="stat-label">Диалоги сегодня</div>
+                <div class="stat-value" id="stat-dialogs-today">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Диалоги всего</div>
+                <div class="stat-value" id="stat-dialogs-total">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Лиды сегодня</div>
+                <div class="stat-value" id="stat-leads-today">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Лиды всего</div>
+                <div class="stat-value" id="stat-leads-total">-</div>
+            </div>
+        </div>
+
+        <div class="filters-panel">
+            <div class="filter-group">
+                <label>Клиент:</label>
+                <select id="user-filter">
+                    <option value="">Все клиенты</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Дата от:</label>
+                <input type="date" id="start-date">
+            </div>
+            <div class="filter-group">
+                <label>Дата до:</label>
+                <input type="date" id="end-date">
+            </div>
+            <div class="filter-group">
+                <label>Роль:</label>
+                <select id="role-filter">
+                    <option value="">Все</option>
+                    <option value="user">Клиент</option>
+                    <option value="assistant">Бот</option>
+                </select>
+            </div>
+            <button id="apply-filters" class="filter-btn">Применить</button>
+            <button id="reset-filters" class="filter-btn secondary">Сбросить</button>
+        </div>
+
+        <div class="content-area">
+            <div class="dialogs-container">
+                <div id="dialogs-list" class="dialogs-list"></div>
+                <div id="loading" class="loading hidden">Загрузка...</div>
+                <div id="empty-state" class="empty-state hidden">Нет сообщений</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+
+

@@ -16,8 +16,16 @@ class BitrixClient:
     """Bitrix24 CRM integration for lead creation"""
     
     def __init__(self):
-        self.webhook_url = settings.bitrix24_webhook_url
+        webhook_url = settings.bitrix24_webhook_url.strip()
+        # Ensure URL ends with /crm.lead.add
+        # Remove trailing slash if present
+        webhook_url = webhook_url.rstrip('/')
+        # Add method if not present
+        if '/crm.lead.add' not in webhook_url:
+            webhook_url = f"{webhook_url}/crm.lead.add"
+        self.webhook_url = webhook_url
         self.timeout = 30.0
+        logger.info("bitrix_client_initialized", webhook_url=self.webhook_url)
     
     async def create_lead(
         self,
@@ -55,18 +63,23 @@ class BitrixClient:
             )
             
             # Prepare lead data
+            # Use minimal required fields first, then add optional ones
             lead_data = {
                 "fields": {
                     "TITLE": f"Лид из Telegram бота - {service_name}",
-                    "NAME": first_name,
-                    "LAST_NAME": last_name,
+                    "NAME": first_name if first_name else "",
+                    "LAST_NAME": last_name if last_name else "",
                     "PHONE": [{"VALUE": phone, "VALUE_TYPE": "WORK"}],
-                    "SOURCE_ID": "TELEGRAM",
-                    "STATUS_ID": "NEW",
-                    "OPENED": "Y",
                     "COMMENTS": full_comment
                 }
             }
+            
+            # Add optional fields only if they exist in Bitrix24
+            # SOURCE_ID and STATUS_ID may not be standard in all Bitrix24 instances
+            # Try without them first, or use standard values
+            # "STATUS_ID": "NEW" - may cause issues if status doesn't exist
+            # "OPENED": "Y" - should be safe
+            # "SOURCE_ID": "WEB" - use standard source instead of custom "TELEGRAM"
             
             logger.info(
                 "creating_bitrix_lead",
@@ -74,7 +87,8 @@ class BitrixClient:
                 phone=phone,
                 service=service_name,
                 comment_length=len(full_comment),
-                has_comment=bool(full_comment and full_comment.strip())
+                has_comment=bool(full_comment and full_comment.strip()),
+                lead_data_fields=list(lead_data["fields"].keys())
             )
             
             # Send request to Bitrix24
@@ -84,8 +98,22 @@ class BitrixClient:
                     json=lead_data
                 )
                 
-                response.raise_for_status()
-                result = response.json()
+                # Log response for debugging
+                try:
+                    result = response.json()
+                except Exception:
+                    result = {"error": f"Failed to parse response: {response.text[:200]}"}
+                    logger.error("bitrix_response_parse_error", response_text=response.text[:500])
+                
+                if response.status_code != 200:
+                    error_msg = result.get('error_description') or result.get('error') or response.text[:500]
+                    logger.error(
+                        "bitrix_api_error",
+                        status_code=response.status_code,
+                        error=error_msg,
+                        full_response=result
+                    )
+                    response.raise_for_status()
             
             if result.get('result'):
                 lead_id = result['result']
@@ -95,6 +123,9 @@ class BitrixClient:
                     name=full_name,
                     service=service_name
                 )
+                
+                # Note: Lead will be saved by the caller if session is provided
+                # This is to avoid circular dependencies and session management issues
                 
                 return {
                     "success": True,

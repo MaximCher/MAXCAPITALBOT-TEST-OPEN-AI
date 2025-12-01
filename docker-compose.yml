@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-maxcapital}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-MaxCapital2024Secure}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -16,6 +16,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - maxcapital_network
 
@@ -32,6 +33,25 @@ services:
       - ./logs:/app/logs
       - ./scripts:/app/scripts
       - ./credentials.json:/app/credentials.json:ro
+    command: python -m src.main
+    restart: unless-stopped
+    networks:
+      - maxcapital_network
+
+  web:
+    build: .
+    container_name: maxcapital_web
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    command: python -m src.web_server
     restart: unless-stopped
     networks:
       - maxcapital_network

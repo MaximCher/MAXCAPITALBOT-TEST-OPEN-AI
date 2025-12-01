@@ -73,11 +73,15 @@ async def notify_manager(
     service: str,
     comment: str
 ):
-    """Send notification to manager"""
+    """Send notification to all manager chat IDs"""
     from src.bot import bot
     
     try:
-        manager_chat_id = settings.manager_chat_id
+        manager_chat_ids = settings.manager_chat_ids_list
+        
+        if not manager_chat_ids:
+            logger.warning("no_manager_chat_ids_configured")
+            return
         
         notification_text = MESSAGES["lead_created"].format(
             name=full_name,
@@ -93,15 +97,32 @@ async def notify_manager(
             )]
         ])
         
-        await bot.send_message(
-            chat_id=manager_chat_id,
-            text=notification_text,
-            reply_markup=keyboard
-        )
+        # Send to all configured chat IDs
+        success_count = 0
+        for chat_id in manager_chat_ids:
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=notification_text,
+                    reply_markup=keyboard
+                )
+                success_count += 1
+                logger.debug(
+                    "notification_sent",
+                    chat_id=chat_id,
+                    user_id=user_id
+                )
+            except Exception as e:
+                logger.error(
+                    "notification_failed_for_chat",
+                    chat_id=chat_id,
+                    error=str(e)
+                )
         
         logger.info(
             "manager_notified",
-            manager_chat_id=manager_chat_id,
+            total_chats=len(manager_chat_ids),
+            success_count=success_count,
             user_id=user_id
         )
         
@@ -116,7 +137,8 @@ async def create_lead_and_notify(
     phone: str,
     selected_service: str,
     session: AsyncSession,
-    state: FSMContext
+    state: FSMContext,
+    loading_message=None  # Message to delete after lead creation
 ):
     """Create lead in Bitrix24 and notify manager (extracted for reuse)"""
     
@@ -181,11 +203,27 @@ async def create_lead_and_notify(
     )
     
     if result.get('success'):
+        lead_id = result.get('lead_id')
         logger.info(
             "lead_created_successfully",
             user_id=user_id,
-            lead_id=result.get('lead_id')
+            lead_id=lead_id
         )
+        
+        # Save lead to database for statistics
+        try:
+            from src.models.bitrix_lead import BitrixLead
+            await BitrixLead.create(
+                session=session,
+                lead_id=lead_id,
+                user_id=user_id,
+                full_name=full_name,
+                phone=phone,
+                service=selected_service
+            )
+        except Exception as e:
+            logger.warning("bitrix_lead_save_failed", error=str(e))
+            # Don't fail the whole operation if saving fails
         
         # Notify manager
         await notify_manager(
@@ -195,6 +233,13 @@ async def create_lead_and_notify(
             service=selected_service,
             comment=comment
         )
+        
+        # Delete loading message if it exists
+        if loading_message:
+            try:
+                await loading_message.delete()
+            except Exception as e:
+                logger.warning("failed_to_delete_loading_message", error=str(e))
         
         # Send confirmation to user
         service_name = SERVICES.get(selected_service, selected_service)
@@ -220,6 +265,13 @@ async def create_lead_and_notify(
         )
         
     else:
+        # Delete loading message if it exists
+        if loading_message:
+            try:
+                await loading_message.delete()
+            except Exception as e:
+                logger.warning("failed_to_delete_loading_message", error=str(e))
+        
         error_message = result.get('error', 'Unknown error')
         logger.error("lead_creation_failed", error=error_message)
         
@@ -261,6 +313,9 @@ async def handle_contact_data(
     state_data = await state.get_data()
     selected_service = state_data.get('selected_service', 'unknown')
     
+    # Send "Заявка создается..." message
+    loading_message = await message.answer("⏳ Заявка создается...")
+    
     # Create lead using the extracted function
     await create_lead_and_notify(
         message=message,
@@ -269,8 +324,109 @@ async def handle_contact_data(
         phone=phone,
         selected_service=selected_service,
         session=session,
-        state=state
+        state=state,
+        loading_message=loading_message
     )
+
+
+@router.callback_query(F.data == "finish_dialog")
+async def handle_finish_dialog(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession
+):
+    """Handle finish dialog button - finish consultation and request contact data"""
+    user_id = callback.from_user.id
+    
+    # Check if consultation mode is active
+    state_data = await state.get_data()
+    consultation_started = state_data.get('consultation_started', False)
+    consultation_mode = state_data.get('consultation_mode', False)
+    selected_service = state_data.get('selected_service')
+    
+    # Answer callback immediately
+    await callback.answer()
+    
+    if not (consultation_started or consultation_mode):
+        await callback.message.answer(
+            "❌ Сначала выберите услугу и начните консультацию.\n\n"
+            "Используйте /start для начала."
+        )
+        return
+    
+    # If no service selected, use general consultation
+    if not selected_service:
+        selected_service = "general_consultation"
+        await state.update_data(selected_service=selected_service)
+    
+    logger.info(
+        "finish_dialog_clicked",
+        user_id=user_id,
+        selected_service=selected_service
+    )
+    
+    # Mark that consultation is finished
+    await state.update_data(
+        consultation_finished=True,
+        awaiting_contact_confirmation=True
+    )
+    
+    # Get user data
+    user = await UserMemory.get_or_create(session, user_id)
+    
+    # Check if user already has contact data
+    if user.full_name and user.phone:
+        # Show confirmation with existing data
+        if selected_service == "general_consultation":
+            service_name = "Общая консультация"
+        else:
+            service_name = SERVICES.get(selected_service, selected_service)
+        
+        confirmation_text = f"""Ваши данные в системе:
+
+👤 ФИО: {user.full_name}
+📞 Телефон: {user.phone}
+⚙️ Услуга: {service_name}
+
+Всё верно?"""
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="✅ Верно",
+                callback_data="confirm_call_data"
+            )],
+            [InlineKeyboardButton(
+                text="✏️ Изменить",
+                callback_data="change_call_data"
+            )]
+        ])
+        
+        await callback.message.answer(
+            text=confirmation_text,
+            reply_markup=keyboard
+        )
+        
+        logger.info(
+            "showing_existing_data_confirmation",
+            user_id=user_id,
+            has_data=True
+        )
+    else:
+        # No existing data - ask for contact data
+        await callback.message.answer(
+            text="📞 Отлично! Для связи с менеджером укажите ваши контактные данные.\n\n"
+                 "Формат: Фамилия Имя Телефон\n"
+                 "Например: Иванов Иван +41791234567"
+        )
+        
+        # Set state to waiting for contact data
+        await state.set_state(LeadForm.waiting_for_contact_data)
+        
+        logger.info(
+            "requesting_contact_data",
+            user_id=user_id,
+            has_data=False
+        )
 
 
 @router.message(Command("call"))
@@ -280,7 +436,7 @@ async def handle_call_command(
     session: AsyncSession
 ):
     """
-    Handle /call command - finish consultation and request contact data
+    Handle /call command - redirect to finish dialog button
     """
     user_id = message.from_user.id
     
@@ -368,14 +524,20 @@ async def handle_confirm_call_data(
     """Handle confirmation of contact data after /call"""
     user_id = callback.from_user.id
     
+    # Answer callback immediately
+    await callback.answer("⏳ Создаю заявку...")
+    
     # Get user and state data
     user = await UserMemory.get_or_create(session, user_id)
     state_data = await state.get_data()
     selected_service = state_data.get('selected_service')
     
     if not user.full_name or not user.phone or not selected_service:
-        await callback.answer("❌ Ошибка: данные не найдены", show_alert=True)
+        await callback.message.answer("❌ Ошибка: данные не найдены")
         return
+    
+    # Send "Заявка создается..." message
+    loading_message = await callback.message.answer("⏳ Заявка создается...")
     
     # Create lead with conversation summary
     await create_lead_and_notify(
@@ -385,10 +547,9 @@ async def handle_confirm_call_data(
         phone=user.phone,
         selected_service=selected_service,
         session=session,
-        state=state
+        state=state,
+        loading_message=loading_message
     )
-    
-    await callback.answer("✅ Заявка создана!")
     
     logger.info("call_data_confirmed", user_id=user_id)
 

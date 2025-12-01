@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from src.models.user_memory import UserMemory
+from src.models.dialog_message import DialogMessage
 from src.vector_store import VectorStore
 from src.ai_agent import AIAgent
 
@@ -18,7 +19,7 @@ logger = structlog.get_logger()
 router = Router()
 
 
-@router.message(F.text)
+@router.message(F.text & ~F.text.startswith('/'))
 async def handle_text_message(
     message: Message,
     state: FSMContext,
@@ -77,6 +78,19 @@ async def handle_text_message(
             content=user_message
         )
         
+        # Save user message to dialog history for admin panel
+        await DialogMessage.create(
+            session=session,
+            user_id=user_id,
+            username=message.from_user.username,
+            full_name=user.full_name,
+            phone=user.phone,
+            message_text=user_message,
+            role="user",
+            chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+        
         # Get conversation history
         conversation_history = await UserMemory.get_conversation_history(
             session=session,
@@ -99,13 +113,16 @@ async def handle_text_message(
         )
         
         # Generate AI response
+        # Use selected_service from state if available, otherwise from user
+        selected_service = state_data.get('selected_service') or user.selected_service
+        
         ai_agent = AIAgent()
         ai_response = await ai_agent.generate_answer(
             user_message=user_message,
             conversation_history=conversation_history,
             vector_context=vector_context,
             user_name=user.full_name,
-            selected_service=user.selected_service
+            selected_service=selected_service
         )
         
         # Add AI response to history
@@ -116,17 +133,36 @@ async def handle_text_message(
             content=ai_response
         )
         
+        # Save AI response to dialog history for admin panel
+        await DialogMessage.create(
+            session=session,
+            user_id=user_id,
+            username=message.from_user.username,
+            full_name=user.full_name,
+            phone=user.phone,
+            message_text=ai_response,
+            role="assistant",
+            chat_id=message.chat.id
+        )
+        
         # Check if in active consultation mode
         is_consultation = state_data.get('consultation_started', False)
         consultation_finished = state_data.get('consultation_finished', False)
+        consultation_mode = state_data.get('consultation_mode', False)
         
-        # Add /call reminder for active consultations
-        if is_consultation and not consultation_finished:
-            ai_response += "\n\n💡 Задайте следующий вопрос.\n\n"
-            ai_response += "[Чтобы завершить консультацию и ожидать звонка менеджера, напишите /call]"
+        # Add finish dialog button for active consultations
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        reply_markup = None
+        if (is_consultation or consultation_mode) and not consultation_finished:
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="✅ Завершить диалог",
+                    callback_data="finish_dialog"
+                )]
+            ])
         
         # Send response to user
-        await message.answer(ai_response)
+        await message.answer(ai_response, reply_markup=reply_markup)
         
         logger.info(
             "ai_response_sent",

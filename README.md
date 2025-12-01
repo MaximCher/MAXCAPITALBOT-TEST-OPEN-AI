@@ -146,6 +146,25 @@ python -m src.main
 4. Get AI-powered consultation
 5. Manager will contact you
 
+### Admin Panel
+
+The bot includes a web-based admin panel for viewing all conversations and statistics.
+
+**Access:**
+- URL: `http://localhost:8000` (local) or `http://YOUR_SERVER_IP:8000` (remote)
+- Password: Set in `.env` as `CHAT_HISTORY_PASSWORD`
+
+**Features:**
+- View all dialogs with clients
+- Filter by client, date, and role (user/bot)
+- View statistics: dialogs count and leads count (today and total)
+- Search and filter conversations
+
+**Security:**
+- Password-protected access
+- Session-based authentication
+- 24-hour session expiration
+
 ### For Administrators
 
 #### Load Documents to Vector Store
