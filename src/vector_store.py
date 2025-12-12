@@ -27,10 +27,12 @@ class VectorStore:
     async def create_embedding(self, text: str) -> List[float]:
         """Create embedding vector for text using OpenAI"""
         try:
-            # Clean and truncate text if needed (max ~8000 tokens)
+            # Clean and truncate text if needed (max ~8000 tokens ~ 10000 chars for Russian)
+            original_length = len(text)
             text = text.strip()
-            if len(text) > 32000:  # Rough char limit
-                text = text[:32000]
+            if len(text) > 10000:  # Very conservative char limit for Russian text (8000 tokens ~ 10000 chars cyrillic)
+                text = text[:10000]
+                logger.warning("text_truncated_for_embedding", original_length=original_length, truncated_to=10000)
             
             response = await client.embeddings.create(
                 model=self.embedding_model,
@@ -60,6 +62,10 @@ class VectorStore:
     ) -> Document:
         """Add document with embedding to vector store"""
         try:
+            # Ensure file_size is int or None
+            if file_size is not None:
+                file_size = int(file_size)
+            
             # Create embedding
             embedding = await self.create_embedding(content)
             

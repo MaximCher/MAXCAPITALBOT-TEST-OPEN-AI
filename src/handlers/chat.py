@@ -13,6 +13,7 @@ from src.models.user_memory import UserMemory
 from src.models.dialog_message import DialogMessage
 from src.vector_store import VectorStore
 from src.ai_agent import AIAgent
+from src.document_sender import find_document_by_request, send_document, get_documents_list_text
 
 logger = structlog.get_logger()
 
@@ -65,6 +66,31 @@ async def handle_text_message(
     
     # Show typing indicator
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
+    
+    # Флаг используется только для логирования
+    is_consultation = consultation_mode
+    
+    # Проверяем запрос на документы
+    requested_doc = find_document_by_request(user_message)
+    if requested_doc:
+        success = await send_document(message, requested_doc)
+        if success:
+            logger.info("document_requested_and_sent", 
+                       user_id=user_id, 
+                       document=requested_doc)
+            return
+        else:
+            # Документ не найден - продолжаем обычный флоу
+            pass
+    
+    # Проверяем запрос на список документов
+    if any(phrase in user_message.lower() for phrase in ['какие документы', 'список документов', 'доступные документы', 'что можно скачать']):
+        from src.handlers.services import _common_actions_keyboard
+        await message.answer(
+            get_documents_list_text(),
+            reply_markup=_common_actions_keyboard()
+        )
+        return
     
     try:
         # Get user data
@@ -145,24 +171,18 @@ async def handle_text_message(
             chat_id=message.chat.id
         )
         
-        # Check if in active consultation mode
-        is_consultation = state_data.get('consultation_started', False)
-        consultation_finished = state_data.get('consultation_finished', False)
-        consultation_mode = state_data.get('consultation_mode', False)
-        
-        # Add finish dialog button for active consultations
-        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        reply_markup = None
-        if (is_consultation or consultation_mode) and not consultation_finished:
-            reply_markup = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="✅ Завершить диалог",
-                    callback_data="finish_dialog"
-                )]
-            ])
-        
+        # Клавиатура с общими действиями на каждом ответе бота
+        from src.handlers.services import _common_actions_keyboard
+        reply_markup = _common_actions_keyboard()
+
         # Send response to user
         await message.answer(ai_response, reply_markup=reply_markup)
+        
+        # Ask for rating (every 3rd message to avoid spam)
+        conversation_length = len(conversation_history)
+        if conversation_length % 3 == 0:  # Every 3rd response
+            from src.handlers.rating import ask_for_rating
+            await ask_for_rating(message, state, user_message, ai_response)
         
         logger.info(
             "ai_response_sent",
@@ -174,9 +194,11 @@ async def handle_text_message(
     except Exception as e:
         logger.error("chat_handling_failed", user_id=user_id, error=str(e))
         
+        from src.handlers.services import _common_actions_keyboard
         await message.answer(
             "❌ Извините, произошла ошибка при обработке вашего сообщения.\n\n"
             "Попробуйте еще раз или свяжитесь с нашим менеджером: "
-            "https://maxcapital.ch/contacts"
+            "https://maxcapital.ch/contacts",
+            reply_markup=_common_actions_keyboard()
         )
 

@@ -32,6 +32,7 @@ services:
       - ./src:/app/src
       - ./logs:/app/logs
       - ./scripts:/app/scripts
+      - ./documents:/app/documents
       - ./credentials.json:/app/credentials.json:ro
     command: python -m src.main
     restart: unless-stopped

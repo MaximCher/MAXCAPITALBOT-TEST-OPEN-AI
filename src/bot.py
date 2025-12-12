@@ -13,7 +13,8 @@ from src.handlers import (
     start_router,
     services_router,
     lead_router,
-    chat_router
+    chat_router,
+    rating_router
 )
 
 logger = structlog.get_logger()
@@ -37,6 +38,7 @@ def setup_handlers() -> None:
     dp.include_router(start_router)
     dp.include_router(services_router)
     dp.include_router(lead_router)
+    dp.include_router(rating_router)  # Rating callbacks
     dp.include_router(chat_router)  # Should be last
     
     logger.info("handlers_registered")

@@ -13,6 +13,8 @@ from src.logger import setup_logging
 from src.config import settings
 from src.database import init_db, close_db
 from src.bot import dp, bot, setup_handlers, setup_middlewares, on_startup, on_shutdown
+from src.auto_sync_drive import drive_sync
+from src.self_learning import self_learning
 
 logger = structlog.get_logger()
 
@@ -81,16 +83,45 @@ async def main():
                 )
             )
             
+            # Start background tasks
+            background_tasks = []
+            
+            # Auto-sync Google Drive (if enabled)
+            if settings.google_drive_folder_id:
+                logger.info("starting_drive_auto_sync")
+                drive_sync_task = asyncio.create_task(
+                    drive_sync.start_background_sync()
+                )
+                background_tasks.append(drive_sync_task)
+            
+            # Self-learning from rated dialogs
+            logger.info("starting_self_learning")
+            learning_task = asyncio.create_task(
+                self_learning.start_background_learning()
+            )
+            background_tasks.append(learning_task)
+            
             # Wait for shutdown signal
             await shutdown_event.wait()
             
-            # Cancel polling
+            # Cancel all tasks
             polling_task.cancel()
+            for task in background_tasks:
+                task.cancel()
             
+            # Wait for cancellation
             try:
                 await polling_task
             except asyncio.CancelledError:
                 logger.info("polling_cancelled")
+            
+            for task in background_tasks:
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            
+            logger.info("all_tasks_cancelled")
     
     except Exception as e:
         logger.error("application_error", error=str(e), exc_info=True)

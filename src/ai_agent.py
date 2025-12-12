@@ -159,13 +159,16 @@ MAXCAPITAL — международная консалтинговая и инв
         try:
             service_name = SERVICES.get(selected_service, selected_service)
             
-            # Get ALL messages from consultation (after service selection)
-            # Filter out system messages about service selection, keep user messages
+            # Собираем все пользовательские сообщения после выбора услуги/направления,
+            # либо, если такой метки нет, просто последние сообщения пользователя.
             consultation_messages = []
             service_selected = False
             
             for msg in conversation_history:
-                if msg.get('role') == 'system' and 'выбрал услугу' in msg.get('content', ''):
+                if msg.get('role') == 'system' and (
+                    'выбрал услугу' in msg.get('content', '') or
+                    'выбрал направление' in msg.get('content', '')
+                ):
                     service_selected = True
                     continue
                 

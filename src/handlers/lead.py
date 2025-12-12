@@ -295,14 +295,9 @@ async def handle_contact_data(
     contact_data = parse_contact_data(text)
     
     if not contact_data:
+        # Показываем только текст ошибки без кнопок, чтобы не мешать диалогу
         await message.answer(
-            text=MESSAGES["error_parsing"],
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="❌ Отменить",
-                    callback_data="back_to_services"
-                )]
-            ])
+            text=MESSAGES["error_parsing"]
         )
         return
     

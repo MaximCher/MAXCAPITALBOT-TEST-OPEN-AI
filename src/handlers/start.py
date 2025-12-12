@@ -19,36 +19,19 @@ router = Router()
 
 
 def get_welcome_keyboard() -> InlineKeyboardMarkup:
-    """Create welcome keyboard with service selection"""
+    """Create welcome keyboard with service selection - каждая кнопка на отдельной строке"""
     buttons = []
     
-    # Service buttons (2 per row)
-    service_items = list(SERVICES.items())
-    for i in range(0, len(service_items), 2):
-        row = []
-        for key, name in service_items[i:i+2]:
-            row.append(InlineKeyboardButton(
+    # Service buttons - каждая на отдельной строке для лучшей читаемости
+    for key, name in SERVICES.items():
+        buttons.append([
+            InlineKeyboardButton(
                 text=name,
                 callback_data=f"service:{key}"
-            ))
-        buttons.append(row)
+            )
+        ])
     
-    # Consultation button
-    buttons.append([
-        InlineKeyboardButton(
-            text="💬 Получить консультацию онлайн",
-            callback_data="consultation"
-        )
-    ])
-    
-    # Contact manager button
-    buttons.append([
-        InlineKeyboardButton(
-            text="📞 Связаться с менеджером",
-            callback_data="contact_manager"
-        )
-    ])
-    
+    # Убрали кнопку "Связаться с менеджером" по просьбе заказчика
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -74,9 +57,12 @@ async def cmd_start(
     # Clear any previous state
     await state.clear()
     
+    # Короткое приветствие без перечисления услуг (они и так на кнопках)
+    welcome_text = MESSAGES["welcome"]
+    
     # Send welcome message
     await message.answer(
-        text=MESSAGES["welcome"],
+        text=welcome_text,
         reply_markup=get_welcome_keyboard()
     )
     
