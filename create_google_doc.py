@@ -25,10 +25,11 @@ def load_service_account_info() -> dict:
 
 
 def find_folder_id(service, folder_name: str) -> Optional[str]:
+    escaped_name = folder_name.replace("'", "\\'")
     query = (
         "mimeType = 'application/vnd.google-apps.folder' "
         "and trashed = false "
-        f"and name = '{folder_name.replace("'", "\\'")}'"
+        f"and name = '{escaped_name}'"
     )
     response = (
         service.files()
